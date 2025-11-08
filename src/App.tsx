@@ -16,6 +16,7 @@ import AdminUniverses from "./pages/admin/Universes";
 import Settings from "./pages/admin/Settings";
 import Profile from "./pages/admin/Profile";
 import NotFound from "./pages/NotFound";
+import { DynamicPageLoader } from "./components/pages/DynamicPageLoader";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,9 @@ const App = () => (
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
           </Route>
+          {/* Dynamic page routing */}
+          <Route path="/:slug" element={<DynamicPageLoader />} />
+          <Route path="/:slug/*" element={<DynamicPageLoader />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
