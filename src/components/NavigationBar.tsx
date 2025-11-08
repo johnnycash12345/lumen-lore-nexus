@@ -2,9 +2,10 @@ import { Logo } from "./Logo";
 import { useLocation, Link } from "react-router-dom";
 
 const NAV_ITEMS = [
-  { label: "Sherlock", path: "/universe/sherlock" },
-  { label: "Potter", path: "/universe/hp" },
-  { label: "LOTR", path: "/universe/lotr" },
+  { label: "Início", path: "/" },
+  { label: "Universos", path: "/universes" },
+  { label: "Como Funciona", path: "/how-it-works" },
+  { label: "Sobre", path: "/about" },
   { label: "Login", path: "/auth" },
 ];
 
