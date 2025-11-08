@@ -31,22 +31,60 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  * Extrai texto de um arquivo PDF
  */
 async function extractTextFromPDF(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  
-  let fullText = '';
-  
-  // Extrair texto de cada página
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ');
-    fullText += pageText + '\n\n';
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    
+    // Verificar se é um PDF válido
+    const header = new Uint8Array(arrayBuffer.slice(0, 5));
+    const headerStr = String.fromCharCode(...header);
+    
+    if (!headerStr.startsWith('%PDF')) {
+      throw new Error('O arquivo não é um PDF válido.');
+    }
+    
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    console.log(`PDF loaded: ${pdf.numPages} pages`);
+    
+    let fullText = '';
+    let totalChars = 0;
+    
+    // Extrair texto de cada página
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      const pageText = textContent.items
+        .map((item: any) => {
+          // Garantir que é uma string
+          if (typeof item.str === 'string') {
+            return item.str;
+          }
+          return '';
+        })
+        .filter(str => str.trim().length > 0)
+        .join(' ');
+      
+      if (pageText.trim().length > 0) {
+        fullText += pageText + '\n\n';
+        totalChars += pageText.length;
+      }
+      
+      console.log(`Page ${i}: ${pageText.length} characters extracted`);
+    }
+    
+    console.log(`Total extracted: ${totalChars} characters from ${pdf.numPages} pages`);
+    
+    if (totalChars === 0) {
+      throw new Error('O PDF não contém texto extraível. O PDF pode estar escaneado (apenas imagens). Use um PDF com texto selecionável ou converta o PDF escaneado usando OCR.');
+    }
+    
+    return fullText.trim();
+    
+  } catch (error: any) {
+    console.error('PDF extraction error:', error);
+    throw new Error(`Erro ao extrair texto do PDF: ${error.message}`);
   }
-  
-  return fullText.trim();
 }
 
 export default function UploadPDF() {
@@ -141,13 +179,13 @@ export default function UploadPDF() {
       try {
         toast({
           title: "Extraindo texto do PDF...",
-          description: "Isso pode levar alguns segundos.",
+          description: "Analisando o arquivo...",
         });
 
         const pdfText = await extractTextFromPDF(file);
         
         if (!pdfText || pdfText.length < 100) {
-          throw new Error("Não foi possível extrair texto do PDF. O PDF pode estar escaneado (imagem) ou protegido. Use um PDF com texto selecionável.");
+          throw new Error("❌ O PDF não contém texto suficiente. Mínimo: 100 caracteres.\n\n⚠️ IMPORTANTE:\n• Se o PDF for escaneado (imagem), ele NÃO FUNCIONARÁ\n• Use um PDF com texto SELECIONÁVEL\n• Teste selecionando texto no PDF antes de fazer upload");
         }
 
         // Validate extracted text quality
@@ -155,16 +193,27 @@ export default function UploadPDF() {
         const readableRatio = readableChars ? readableChars.length / pdfText.length : 0;
         
         if (readableRatio < 0.5) {
-          throw new Error(`O texto extraído parece corrompido ou o PDF está escaneado. Taxa de legibilidade: ${(readableRatio * 100).toFixed(1)}%. Por favor, use um PDF com texto selecionável.`);
+          throw new Error(`❌ O texto extraído tem baixa qualidade (${(readableRatio * 100).toFixed(1)}% legível).\n\n⚠️ POSSÍVEIS CAUSAS:\n• PDF escaneado (apenas imagens)\n• PDF corrompido\n• Codificação incorreta\n\n✅ SOLUÇÃO: Use um PDF com texto selecionável`);
         }
 
-        console.log(`Extracted ${pdfText.length} characters from PDF`);
-        console.log(`First 500 chars:`, pdfText.substring(0, 500));
-        console.log(`Readability: ${(readableRatio * 100).toFixed(1)}%`);
+        // Check for binary indicators
+        const hasBinary = pdfText.includes('endstream') || 
+                         pdfText.includes('endobj') || 
+                         pdfText.includes('JFIF') ||
+                         pdfText.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
+        
+        if (hasBinary) {
+          throw new Error(`❌ O PDF contém dados binários não processados.\n\n⚠️ O PDF pode estar:\n• Escaneado (imagem)\n• Mal formatado\n• Corrompido\n\n✅ SOLUÇÃO: Use um PDF diferente com texto selecionável`);
+        }
+
+        console.log(`✅ PDF Text Extracted Successfully:`);
+        console.log(`   - Length: ${pdfText.length} characters`);
+        console.log(`   - Readability: ${(readableRatio * 100).toFixed(1)}%`);
+        console.log(`   - First 1000 chars:`, pdfText.substring(0, 1000));
         
         toast({
-          title: "Texto extraído!",
-          description: `Extraídos ${pdfText.length} caracteres (${(readableRatio * 100).toFixed(0)}% legível). Iniciando processamento...`,
+          title: "✅ Texto extraído com sucesso!",
+          description: `${pdfText.length.toLocaleString()} caracteres (${(readableRatio * 100).toFixed(0)}% legível)`,
         });
 
         // Call edge function to process with Deepseek
