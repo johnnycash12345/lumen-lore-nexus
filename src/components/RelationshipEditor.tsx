@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Edit } from "lucide-react";
-// @ts-ignore - react-force-graph doesn't have types
-import { ForceGraph2D } from "react-force-graph";
 import type { Tables } from "@/integrations/supabase/types";
 import { z } from "zod";
 
@@ -28,17 +26,24 @@ interface Entity {
 
 interface GraphNode {
   id: string;
-  name: string;
-  type: string;
-  color: string;
+  label: string;
+  fill?: string;
+  data?: {
+    type: string;
+    originalName: string;
+  };
 }
 
 interface GraphLink {
+  id: string;
   source: string;
   target: string;
-  type: string;
-  color: string;
-  relationshipId: string;
+  label?: string;
+  fill?: string;
+  data?: {
+    relationshipId: string;
+    type: string;
+  };
 }
 
 const relationshipSchema = z.object({
@@ -71,9 +76,9 @@ const ENTITY_COLORS = {
 export const RelationshipEditor = ({ universeId }: { universeId: string }) => {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
+  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphLink[] }>({
     nodes: [],
-    links: [],
+    edges: [],
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRelationship, setEditingRelationship] = useState<Relationship | null>(null);
@@ -86,7 +91,6 @@ export const RelationshipEditor = ({ universeId }: { universeId: string }) => {
     description: "",
   });
   const { toast } = useToast();
-  const forceRef = useRef<any>();
 
   useEffect(() => {
     fetchData();
@@ -128,23 +132,30 @@ export const RelationshipEditor = ({ universeId }: { universeId: string }) => {
   const buildGraphData = () => {
     const nodes: GraphNode[] = entities.map((entity) => ({
       id: entity.id,
-      name: entity.name,
-      type: entity.type,
-      color: ENTITY_COLORS[entity.type],
+      label: entity.name,
+      fill: ENTITY_COLORS[entity.type],
+      data: {
+        type: entity.type,
+        originalName: entity.name,
+      },
     }));
 
-    const links: GraphLink[] = relationships.map((rel) => {
+    const edges: GraphLink[] = relationships.map((rel) => {
       const relType = RELATIONSHIP_TYPES.find((t) => t.value === rel.relationship_type);
       return {
+        id: rel.id,
         source: rel.from_entity_id,
         target: rel.to_entity_id,
-        type: rel.relationship_type,
-        color: relType?.color || "#6b7280",
-        relationshipId: rel.id,
+        label: relType?.label,
+        fill: relType?.color || "#6b7280",
+        data: {
+          relationshipId: rel.id,
+          type: rel.relationship_type,
+        },
       };
     });
 
-    setGraphData({ nodes, links });
+    setGraphData({ nodes, edges });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -252,20 +263,17 @@ export const RelationshipEditor = ({ universeId }: { universeId: string }) => {
     });
   };
 
-  const handleNodeClick = useCallback((node: any) => {
-    const entity = entities.find((e) => e.id === node.id);
-    if (entity) {
-      toast({
-        title: entity.name,
-        description: `Tipo: ${entity.type}`,
-      });
-    }
-  }, [entities, toast]);
+  const handleNodeClick = useCallback((node: GraphNode) => {
+    toast({
+      title: node.label,
+      description: `Tipo: ${node.data?.type}`,
+    });
+  }, [toast]);
 
-  const handleLinkClick = useCallback((link: any) => {
-    const relationship = relationships.find((r) => r.id === link.relationshipId);
-    if (relationship) {
-      handleEdit(relationship);
+  const handleEdgeClick = useCallback((edge: GraphLink) => {
+    const rel = relationships.find((r) => r.id === edge.data?.relationshipId);
+    if (rel) {
+      handleEdit(rel);
     }
   }, [relationships]);
 
@@ -398,36 +406,40 @@ export const RelationshipEditor = ({ universeId }: { universeId: string }) => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-[600px] border rounded-lg bg-muted/20">
+          <div className="space-y-4">
             {graphData.nodes.length > 0 ? (
-              <ForceGraph2D
-                ref={forceRef}
-                graphData={graphData}
-                nodeLabel="name"
-                nodeColor="color"
-                nodeRelSize={8}
-                linkColor="color"
-                linkWidth={2}
-                linkDirectionalArrowLength={6}
-                linkDirectionalArrowRelPos={1}
-                onNodeClick={handleNodeClick}
-                onLinkClick={handleLinkClick}
-                nodeCanvasObject={(node: any, ctx, globalScale) => {
-                  const label = node.name;
-                  const fontSize = 12 / globalScale;
-                  ctx.font = `${fontSize}px Sans-Serif`;
-                  ctx.textAlign = "center";
-                  ctx.textBaseline = "middle";
-                  ctx.fillStyle = node.color;
-                  ctx.beginPath();
-                  ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI, false);
-                  ctx.fill();
-                  ctx.fillStyle = "white";
-                  ctx.fillText(label, node.x, node.y + 15);
-                }}
-              />
+              <div className="border rounded-lg p-6 bg-muted/20 min-h-[400px]">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {graphData.nodes.map((node) => (
+                    <div
+                      key={node.id}
+                      className="p-4 border rounded-lg bg-background hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => handleNodeClick(node)}
+                      style={{ borderLeftColor: node.fill, borderLeftWidth: '4px' }}
+                    >
+                      <h4 className="font-semibold">{node.label}</h4>
+                      <p className="text-sm text-muted-foreground capitalize">{node.data?.type}</p>
+                      <div className="mt-2 space-y-1">
+                        {graphData.edges
+                          .filter(e => e.source === node.id || e.target === node.id)
+                          .slice(0, 3)
+                          .map((edge) => {
+                            const otherNodeId = edge.source === node.id ? edge.target : edge.source;
+                            const otherNode = graphData.nodes.find(n => n.id === otherNodeId);
+                            return (
+                              <div key={edge.id} className="text-xs text-muted-foreground flex items-center gap-1">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: edge.fill }} />
+                                <span>{edge.label} → {otherNode?.label}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="flex items-center justify-center h-[200px] text-muted-foreground border rounded-lg">
                 Nenhuma entidade encontrada. Adicione personagens, locais ou eventos primeiro.
               </div>
             )}
