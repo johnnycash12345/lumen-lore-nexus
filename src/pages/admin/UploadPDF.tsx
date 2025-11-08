@@ -12,6 +12,12 @@ import { Upload, Loader2, CheckCircle, Edit3, RefreshCw, Sparkles } from "lucide
 import { ExtractionMonitor } from "@/components/ExtractionMonitor";
 import { ExtractedEntitiesView } from "@/components/ExtractedEntitiesView";
 import { QualityValidation } from "@/components/QualityValidation";
+import { EditEntities } from "@/components/EditEntities";
+import { RelationshipEditor } from "@/components/RelationshipEditor";
+import { GeneratePages } from "@/components/GeneratePages";
+import { UniverseChat } from "@/components/UniverseChat";
+import { InteractiveTimeline } from "@/components/InteractiveTimeline";
+import { RelationshipMatrix } from "@/components/RelationshipMatrix";
 import { useNavigate } from "react-router-dom";
 
 export default function UploadPDF() {
@@ -410,10 +416,15 @@ export default function UploadPDF() {
       {universeId && (
         <div className="space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-8 overflow-x-auto">
               <TabsTrigger value="monitor">Monitoramento</TabsTrigger>
               <TabsTrigger value="entities" disabled={!isComplete}>Entidades</TabsTrigger>
               <TabsTrigger value="quality" disabled={!isComplete}>Qualidade</TabsTrigger>
+              <TabsTrigger value="edit" disabled={!isComplete}>Editar</TabsTrigger>
+              <TabsTrigger value="relationships" disabled={!isComplete}>Relacionamentos</TabsTrigger>
+              <TabsTrigger value="timeline" disabled={!isComplete}>Timeline</TabsTrigger>
+              <TabsTrigger value="matrix" disabled={!isComplete}>Matriz</TabsTrigger>
+              <TabsTrigger value="chat" disabled={!isComplete}>Chat</TabsTrigger>
             </TabsList>
 
             <TabsContent value="monitor" className="space-y-6">
@@ -442,42 +453,92 @@ export default function UploadPDF() {
                 />
               )}
             </TabsContent>
+
+            <TabsContent value="edit" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <EditEntities universeId={universeId} />
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="relationships" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <RelationshipEditor universeId={universeId} />
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="timeline" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <InteractiveTimeline universeId={universeId} />
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="matrix" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <RelationshipMatrix universeId={universeId} />
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="chat" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <UniverseChat 
+                    universeId={universeId} 
+                    universeName={name}
+                  />
+                </Card>
+              )}
+            </TabsContent>
           </Tabs>
 
           {/* Final Action Buttons */}
           {isComplete && (
             <Card className="p-6">
-              <div className="flex gap-4">
+              <div className="space-y-4">
+                <GeneratePages 
+                  universeId={universeId} 
+                  universeName={name}
+                />
+                
+                <div className="flex gap-4">
+                  <Button
+                    onClick={handlePublish}
+                    className="flex-1 bg-lumen-navy hover:bg-lumen-navy/90 text-white"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Publicar Universo
+                  </Button>
+                  <Button
+                    onClick={handleEdit}
+                    variant="secondary"
+                    className="flex-1"
+                  >
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Editar Entidades
+                  </Button>
+                  <Button
+                    onClick={handleReprocess}
+                    variant="outline"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reprocessar
+                  </Button>
+                </div>
                 <Button
-                  onClick={handlePublish}
-                  className="flex-1 bg-lumen-navy hover:bg-lumen-navy/90 text-white"
+                  onClick={handleReset}
+                  variant="ghost"
+                  className="w-full"
                 >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Publicar Universo
-                </Button>
-                <Button
-                  onClick={handleEdit}
-                  variant="secondary"
-                  className="flex-1"
-                >
-                  <Edit3 className="mr-2 h-4 w-4" />
-                  Editar Entidades
-                </Button>
-                <Button
-                  onClick={handleReprocess}
-                  variant="outline"
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Reprocessar
+                  Novo Upload
                 </Button>
               </div>
-              <Button
-                onClick={handleReset}
-                variant="ghost"
-                className="w-full mt-4"
-              >
-                Novo Upload
-              </Button>
             </Card>
           )}
         </div>

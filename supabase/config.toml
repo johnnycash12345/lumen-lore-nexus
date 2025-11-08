@@ -1,1 +1,7 @@
 project_id = "kehxyibjexmdshwcuqyn"
+
+[functions.process-pdf]
+verify_jwt = false
+
+[functions.universe-chat]
+verify_jwt = false
