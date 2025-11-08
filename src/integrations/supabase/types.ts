@@ -64,6 +64,38 @@ export type Database = {
           },
         ]
       }
+      complete_extractions: {
+        Row: {
+          created_at: string
+          extraction_data: Json
+          id: string
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          extraction_data: Json
+          id?: string
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          extraction_data?: Json
+          id?: string
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complete_extractions_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emotional_analyses: {
         Row: {
           analysis_data: Json

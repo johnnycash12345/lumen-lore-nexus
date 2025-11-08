@@ -589,6 +589,87 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
 
     await updateProgress(supabaseClient, inputUniverseId, 'Análise de arcos narrativos concluída', 85, logger);
 
+    // ===== FASE 7: EXTRAÇÃO COMPLETA =====
+    logger.info('Complete Extraction', 'Starting COMPLETE extraction...');
+    const extractionStartTime = Date.now();
+
+    try {
+      const {
+        extractCompleteCharacters,
+        extractCompleteLocations,
+        extractCompleteObjects,
+        extractCompleteEvents,
+        extractCompleteDialogues,
+        extractCompleteThemes,
+        consolidateCompleteExtraction,
+      } = await import('./complete-extraction-strategy.ts');
+
+      logger.info('Complete Extraction', 'PHASE 1: Complete characters...');
+      const completeCharacters = await extractCompleteCharacters(pdfText, logger);
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Personagens', 86, logger);
+
+      logger.info('Complete Extraction', 'PHASE 2: Complete locations...');
+      const completeLocations = await extractCompleteLocations(pdfText, logger);
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Locais', 87, logger);
+
+      logger.info('Complete Extraction', 'PHASE 3: Complete objects...');
+      const completeObjects = await extractCompleteObjects(pdfText, logger);
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Objetos', 88, logger);
+
+      logger.info('Complete Extraction', 'PHASE 4: Complete events...');
+      const completeEvents = await extractCompleteEvents(pdfText, logger);
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Eventos', 89, logger);
+
+      logger.info('Complete Extraction', 'PHASE 5: Complete dialogues...');
+      const completeDialogues = await extractCompleteDialogues(
+        pdfText,
+        completeCharacters.map(c => c.name),
+        logger
+      );
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Diálogos', 90, logger);
+
+      logger.info('Complete Extraction', 'PHASE 6: Complete themes...');
+      const completeThemes = await extractCompleteThemes(pdfText, logger);
+      await updateProgress(supabaseClient, inputUniverseId, 'Extração completa - Temas', 91, logger);
+
+      logger.info('Complete Extraction', 'Consolidating...');
+      const completeExtraction = await consolidateCompleteExtraction(
+        inputUniverseId,
+        completeCharacters,
+        completeLocations,
+        completeObjects,
+        completeEvents,
+        completeDialogues,
+        completeThemes,
+        pdfText,
+        logger
+      );
+
+      // Salvar no banco
+      const { error: completeExtractionError } = await supabaseClient
+        .from('complete_extractions')
+        .insert({
+          universe_id: inputUniverseId,
+          extraction_data: completeExtraction,
+        });
+
+      if (completeExtractionError) {
+        logger.error('Complete Extraction', 'Failed to save', completeExtractionError);
+      } else {
+        const duration = (Date.now() - extractionStartTime) / 1000;
+        logger.info('Complete Extraction', 'COMPLETE EXTRACTION FINISHED', {
+          duration: `${duration}s`,
+          stats: completeExtraction.statistics,
+        });
+      }
+
+    } catch (error: any) {
+      logger.error('Complete Extraction', 'Failed', error);
+      // Continue processing
+    }
+
+    await updateProgress(supabaseClient, inputUniverseId, 'Extração completa finalizada', 92, logger);
+
     // ===== FASE 8: GERAR PÁGINAS =====
     
     console.log('Generating pages for universe...');
