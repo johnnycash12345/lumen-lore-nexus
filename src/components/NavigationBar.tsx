@@ -2,11 +2,10 @@ import { Logo } from "./Logo";
 import { useLocation, Link } from "react-router-dom";
 
 const NAV_ITEMS = [
-  { label: "Início", path: "/" },
-  { label: "Universos", path: "/universes" },
-  { label: "Personagens", path: "/characters" },
-  { label: "Linha do Tempo", path: "/timeline" },
-  { label: "Sobre", path: "/about" },
+  { label: "Sherlock", path: "/universe/sherlock" },
+  { label: "Potter", path: "/universe/hp" },
+  { label: "LOTR", path: "/universe/lotr" },
+  { label: "Login", path: "/auth" },
 ];
 
 export const NavigationBar = () => {

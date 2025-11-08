@@ -14,16 +14,367 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      characters: {
+        Row: {
+          abilities: string[] | null
+          aliases: string[] | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          occupation: string | null
+          personality: string | null
+          role: string | null
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          abilities?: string[] | null
+          aliases?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          occupation?: string | null
+          personality?: string | null
+          role?: string | null
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          abilities?: string[] | null
+          aliases?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          occupation?: string | null
+          personality?: string | null
+          role?: string | null
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "characters_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          characters_involved: string[] | null
+          created_at: string
+          description: string | null
+          event_date: string | null
+          id: string
+          location_id: string | null
+          name: string
+          significance: string | null
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          characters_involved?: string[] | null
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          location_id?: string | null
+          name: string
+          significance?: string | null
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          characters_involved?: string[] | null
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          location_id?: string | null
+          name?: string
+          significance?: string | null
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          country: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          significance: string | null
+          type: string | null
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          significance?: string | null
+          type?: string | null
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          significance?: string | null
+          type?: string | null
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      objects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string | null
+          powers: string | null
+          type: string | null
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id?: string | null
+          powers?: string | null
+          type?: string | null
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string | null
+          powers?: string | null
+          type?: string | null
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "objects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "objects_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_jobs: {
+        Row: {
+          created_at: string
+          current_step: string | null
+          error_message: string | null
+          id: string
+          progress: number | null
+          status: string
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_step?: string | null
+          error_message?: string | null
+          id?: string
+          progress?: number | null
+          status?: string
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_step?: string | null
+          error_message?: string | null
+          id?: string
+          progress?: number | null
+          status?: string
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      universes: {
+        Row: {
+          author: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          name: string
+          publication_year: number | null
+          source_type: string
+          status: string
+          tags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          author?: string | null
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          name: string
+          publication_year?: number | null
+          source_type: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          author?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          name?: string
+          publication_year?: number | null
+          source_type?: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "universes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +501,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

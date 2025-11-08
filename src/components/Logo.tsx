@@ -1,6 +1,6 @@
 import { Hexagon } from "lucide-react";
 
-interface LogoProps {
+export interface LogoProps {
   className?: string;
   showText?: boolean;
   animate?: boolean;
