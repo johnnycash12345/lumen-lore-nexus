@@ -114,12 +114,15 @@ serve(async (req) => {
 
     // ===== FASE 1: VALIDAÇÃO DO PDF =====
     logger.info('PDF Validation', 'Validating PDF text...');
+    
+    // Log first 500 characters for debugging
+    logger.info('PDF Validation', `First 500 chars: ${pdfText.substring(0, 500)}`);
 
     const pdfValidation = validatePdfText(pdfText);
     if (!pdfValidation.valid) {
       throw new ProcessingErrorHandler(
         'INVALID_PDF',
-        `PDF validation failed: ${pdfValidation.errors.join(', ')}`,
+        `PDF validation failed: ${pdfValidation.errors.join(', ')}. IMPORTANTE: Se o PDF for escaneado (imagem), você precisa converter para texto primeiro usando OCR.`,
         'PDF Validation',
         false
       );

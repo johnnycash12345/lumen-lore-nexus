@@ -144,14 +144,24 @@ export default function UploadPDF() {
         const pdfText = await extractTextFromPDF(file);
         
         if (!pdfText || pdfText.length < 100) {
-          throw new Error("Não foi possível extrair texto do PDF. Verifique se o arquivo contém texto selecionável.");
+          throw new Error("Não foi possível extrair texto do PDF. O PDF pode estar escaneado (imagem) ou protegido. Use um PDF com texto selecionável.");
+        }
+
+        // Validate extracted text quality
+        const readableChars = pdfText.match(/[a-zA-ZÀ-ÿ0-9\s.,;:!?'"()\-]/g);
+        const readableRatio = readableChars ? readableChars.length / pdfText.length : 0;
+        
+        if (readableRatio < 0.5) {
+          throw new Error(`O texto extraído parece corrompido ou o PDF está escaneado. Taxa de legibilidade: ${(readableRatio * 100).toFixed(1)}%. Por favor, use um PDF com texto selecionável.`);
         }
 
         console.log(`Extracted ${pdfText.length} characters from PDF`);
+        console.log(`First 500 chars:`, pdfText.substring(0, 500));
+        console.log(`Readability: ${(readableRatio * 100).toFixed(1)}%`);
         
         toast({
           title: "Texto extraído!",
-          description: `Extraídos ${pdfText.length} caracteres. Iniciando processamento...`,
+          description: `Extraídos ${pdfText.length} caracteres (${(readableRatio * 100).toFixed(0)}% legível). Iniciando processamento...`,
         });
 
         // Call edge function to process with Deepseek

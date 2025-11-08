@@ -18,9 +18,32 @@ export function validatePdfText(text: string): { valid: boolean; errors: string[
     errors.push('PDF text is too long (more than 10MB)');
   }
 
+  // Check for binary/encoded PDF content
+  const binaryIndicators = [
+    '%PDF',           // PDF header
+    'endstream',      // PDF stream marker
+    'endobj',         // PDF object marker
+    '\x00',           // Null bytes
+    'JFIF',           // JPEG header
+    '\xFF\xD8\xFF',   // JPEG magic bytes
+  ];
+
+  const containsBinary = binaryIndicators.some(indicator => text.includes(indicator));
+  if (containsBinary) {
+    errors.push('PDF text appears to be binary/unprocessed. The PDF may be scanned or text extraction failed.');
+  }
+
+  // Check for valid readable characters (at least 50% should be readable)
+  const readableChars = text.match(/[a-zA-ZÀ-ÿ0-9\s.,;:!?'"()\-]/g);
+  const readableRatio = readableChars ? readableChars.length / text.length : 0;
+  
+  if (readableRatio < 0.5) {
+    errors.push(`PDF text has low readability (${(readableRatio * 100).toFixed(1)}%). May be binary or poorly extracted.`);
+  }
+
   // Check for valid characters
   if (!/[a-zA-Z0-9]/.test(text)) {
-    errors.push('PDF text contains no valid characters');
+    errors.push('PDF text contains no valid alphanumeric characters');
   }
 
   return {
