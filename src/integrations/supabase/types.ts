@@ -281,6 +281,53 @@ export type Database = {
         }
         Relationships: []
       }
+      relationships: {
+        Row: {
+          created_at: string
+          description: string | null
+          from_entity_id: string
+          from_entity_type: string
+          id: string
+          relationship_type: string
+          to_entity_id: string
+          to_entity_type: string
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          from_entity_id: string
+          from_entity_type: string
+          id?: string
+          relationship_type: string
+          to_entity_id: string
+          to_entity_type: string
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          from_entity_id?: string
+          from_entity_type?: string
+          id?: string
+          relationship_type?: string
+          to_entity_id?: string
+          to_entity_type?: string
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relationships_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       universes: {
         Row: {
           author: string | null
