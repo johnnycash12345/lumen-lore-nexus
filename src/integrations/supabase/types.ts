@@ -194,6 +194,38 @@ export type Database = {
           },
         ]
       }
+      narrative_structures: {
+        Row: {
+          created_at: string
+          id: string
+          structure_data: Json
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          structure_data: Json
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          structure_data?: Json
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narrative_structures_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       objects: {
         Row: {
           created_at: string

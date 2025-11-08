@@ -25,6 +25,15 @@ import {
   consolidateRelationshipNetwork,
 } from './relationship-extraction-strategy.ts';
 import type { RelationshipDynamics } from './relationship-types.ts';
+import {
+  identifyNarrativeStructure,
+  extractNarrativeEvents,
+  analyzeMainArc,
+  identifySecondaryArcs,
+  analyzeCharacterArcs,
+  consolidateNarrativeStructure,
+} from './narrative-arc-extraction.ts';
+import type { NarrativeEvent } from './narrative-arc-types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -516,6 +525,69 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     }
 
     await updateProgress(supabaseClient, inputUniverseId, 'Análise de relacionamentos concluída', 80, logger);
+
+    // ===== FASE 6: ANÁLISE DE ARCOS NARRATIVOS =====
+    logger.info('Narrative Analysis', 'Starting narrative arc analysis...');
+    await updateProgress(supabaseClient, inputUniverseId, 'Analisando arcos narrativos', 82, logger);
+
+    try {
+      // Identificar estrutura
+      const narrativeStructure = await identifyNarrativeStructure(pdfText, logger);
+      logger.info('Narrative Analysis', `Identified structure: ${narrativeStructure.type}`);
+
+      // Extrair eventos
+      const narrativeEvents: NarrativeEvent[] = await extractNarrativeEvents(pdfText, narrativeStructure, logger);
+      logger.info('Narrative Analysis', `Extracted ${narrativeEvents.length} events`);
+
+      // Analisar arco principal
+      const mainArc = await analyzeMainArc(pdfText, narrativeEvents, logger);
+
+      // Identificar arcos secundários
+      const secondaryArcs = await identifySecondaryArcs(
+        pdfText,
+        mainArc,
+        entities.characters.map((c: any) => c.name),
+        logger
+      );
+
+      // Analisar arcos de personagens (limitar a 5)
+      const characterArcs = await analyzeCharacterArcs(
+        entities.characters.map((c: any) => c.name),
+        narrativeEvents,
+        logger
+      );
+
+      // Consolidar estrutura narrativa
+      const narrativeStructureComplete = await consolidateNarrativeStructure(
+        inputUniverseId,
+        narrativeStructure,
+        mainArc,
+        secondaryArcs,
+        characterArcs,
+        narrativeEvents,
+        logger
+      );
+
+      // Salvar no banco de dados
+      const { error: narrativeError } = await supabaseClient
+        .from('narrative_structures')
+        .insert({
+          universe_id: inputUniverseId,
+          structure_data: narrativeStructureComplete,
+        });
+
+      if (narrativeError) {
+        logger.error('Narrative Analysis', 'Failed to save narrative structure', narrativeError);
+      } else {
+        logger.info('Narrative Analysis', 'Narrative analysis completed and saved');
+      }
+
+    } catch (error: any) {
+      logger.error('Narrative Analysis', 'Failed to complete narrative analysis', error);
+      // Continue processing
+    }
+
+    await updateProgress(supabaseClient, inputUniverseId, 'Análise de arcos narrativos concluída', 85, logger);
 
     // ===== FASE 8: GERAR PÁGINAS =====
     
