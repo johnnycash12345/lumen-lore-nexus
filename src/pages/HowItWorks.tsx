@@ -87,43 +87,39 @@ export default function HowItWorks() {
   ];
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className="min-h-screen bg-background">
       <DecorativeDots />
       <NavigationBar />
 
-      <div className="container mx-auto px-4 py-12 max-w-6xl">
+      <div className="container mx-auto px-4 py-12 md:py-16 max-w-6xl">
         {/* Hero */}
-        <div className="text-center mb-16">
-          <h1 className="font-serif text-5xl md:text-6xl font-bold text-foreground mb-6">
+        <div className="text-center mb-12">
+          <h1 className="font-serif text-5xl md:text-6xl font-bold text-foreground mb-4">
             Como Funciona
           </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Descubra como transformamos textos em universos narrativos estruturados e
-            interativos
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            Transformamos textos em universos interativos
           </p>
         </div>
 
         {/* Process Steps */}
-        <div className="mb-20">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-10 text-center">
+        <div className="mb-12">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-8 text-center">
             O Processo
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {steps.map((step, index) => {
               const Icon = step.icon;
               return (
-                <Card
-                  key={index}
-                  className="p-6 hover:shadow-elegant transition-all duration-300"
-                >
+                <Card key={index} className="p-5 hover:shadow-elegant transition-all">
                   <div className="flex flex-col items-center text-center">
-                    <div className="p-4 bg-lumen-glow/10 rounded-full mb-4">
-                      <Icon className="w-8 h-8 text-lumen-navy" />
+                    <div className="p-3 bg-lumen-glow/10 rounded-full mb-3">
+                      <Icon className="w-6 h-6 text-lumen-navy" />
                     </div>
-                    <h3 className="font-serif text-xl font-semibold text-foreground mb-3">
+                    <h3 className="font-serif text-lg font-semibold text-foreground mb-2">
                       {step.title}
                     </h3>
-                    <p className="text-muted-foreground">{step.description}</p>
+                    <p className="text-sm text-muted-foreground">{step.description}</p>
                   </div>
                 </Card>
               );
@@ -132,20 +128,20 @@ export default function HowItWorks() {
         </div>
 
         {/* What We Extract */}
-        <div className="mb-16">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-10 text-center">
+        <div className="mb-12">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-8 text-center">
             O Que Extraímos
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {capabilities.map((capability) => (
-              <Card key={capability.title} className="p-6">
-                <h3 className="font-serif text-2xl font-semibold text-foreground mb-4">
+              <Card key={capability.title} className="p-5">
+                <h3 className="font-serif text-lg font-semibold text-foreground mb-3">
                   {capability.title}
                 </h3>
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {capability.items.map((item, index) => (
-                    <li key={index} className="flex items-start gap-2 text-muted-foreground">
-                      <CheckCircle className="w-5 h-5 text-lumen-navy flex-shrink-0 mt-0.5" />
+                    <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <CheckCircle className="w-4 h-4 text-lumen-navy flex-shrink-0 mt-0.5" />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -156,22 +152,22 @@ export default function HowItWorks() {
         </div>
 
         {/* Technology Stack */}
-        <Card className="p-8 md:p-12 bg-lumen-navy text-white mb-16">
-          <h2 className="font-serif text-3xl font-bold mb-6 text-center">
-            Tecnologias Utilizadas
+        <Card className="p-8 bg-lumen-navy text-white mb-12">
+          <h2 className="font-serif text-2xl font-bold mb-5 text-center">
+            Tecnologias
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-lg">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h3 className="font-serif text-xl font-semibold mb-3">Inteligência Artificial</h3>
-              <ul className="space-y-2">
+              <h3 className="font-serif text-lg font-semibold mb-2">Inteligência Artificial</h3>
+              <ul className="space-y-1">
                 <li>• Deepseek (processamento principal)</li>
                 <li>• GPT-4 (análises complexas)</li>
                 <li>• Claude (compreensão contextual)</li>
               </ul>
             </div>
             <div>
-              <h3 className="font-serif text-xl font-semibold mb-3">Infraestrutura</h3>
-              <ul className="space-y-2">
+              <h3 className="font-serif text-lg font-semibold mb-2">Infraestrutura</h3>
+              <ul className="space-y-1">
                 <li>• React + TypeScript</li>
                 <li>• Supabase (banco de dados)</li>
                 <li>• Edge Functions (processamento)</li>
@@ -182,24 +178,23 @@ export default function HowItWorks() {
 
         {/* CTA */}
         <div className="text-center">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-6">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-4">
             Pronto para Explorar?
           </h2>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Descubra universos narrativos analisados profundamente e converse com personagens
-            de seus mundos favoritos
+          <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
+            Descubra universos analisados profundamente por IA
           </p>
           <a
             href="/universes"
-            className="inline-block px-8 py-4 bg-lumen-navy text-white font-serif text-lg rounded-lg hover:bg-lumen-navy/90 transition-colors"
+            className="inline-block px-6 py-3 bg-lumen-navy text-white font-serif rounded-lg hover:bg-lumen-navy/90 transition-colors"
           >
-            Ver Universos Disponíveis
+            Ver Universos
           </a>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 px-4 mt-20">
+      <footer className="border-t border-border py-8 px-4 mt-12">
         <div className="container mx-auto text-center">
           <p className="text-sm text-muted-foreground font-mono">
             Enciclopédia Interativa Multiagente de Universos Narrativos

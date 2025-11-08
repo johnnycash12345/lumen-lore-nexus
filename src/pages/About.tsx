@@ -32,58 +32,55 @@ export default function About() {
   ];
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className="min-h-screen bg-background">
       <DecorativeDots />
       <NavigationBar />
 
-      <div className="container mx-auto px-4 py-12 max-w-5xl">
+      <div className="container mx-auto px-4 py-12 md:py-16 max-w-4xl">
         {/* Hero */}
-        <div className="text-center mb-16">
-          <h1 className="font-serif text-5xl md:text-6xl font-bold text-foreground mb-6">
+        <div className="text-center mb-12">
+          <h1 className="font-serif text-5xl md:text-6xl font-bold text-foreground mb-4">
             Sobre o Lumen
           </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            A Enciclopédia Interativa Multiagente de Universos Narrativos que vai além da
-            Wikipédia, oferecendo análises profundas e conversações com seus mundos favoritos.
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            A enciclopédia interativa que vai além da Wikipédia
           </p>
         </div>
 
         {/* Mission */}
-        <Card className="p-8 md:p-12 mb-16">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-6 text-center">
+        <Card className="p-8 mb-12">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-4 text-center">
             Nossa Missão
           </h2>
-          <p className="text-lg text-muted-foreground leading-relaxed mb-4">
+          <p className="text-muted-foreground leading-relaxed mb-3">
             O Lumen nasceu da paixão por histórias e da vontade de criar uma ferramenta que
-            permitisse aos fãs explorar seus universos favoritos de forma mais profunda e
-            interativa.
+            permitisse aos fãs explorar seus universos favoritos de forma mais profunda.
           </p>
-          <p className="text-lg text-muted-foreground leading-relaxed">
-            Não queremos apenas listar fatos sobre personagens e eventos. Queremos conectar,
-            analisar e dar vida à narrativa através da inteligência artificial, oferecendo
-            insights que vão muito além do que uma enciclopédia tradicional pode oferecer.
+          <p className="text-muted-foreground leading-relaxed">
+            Queremos conectar, analisar e dar vida à narrativa através da IA, oferecendo
+            insights que vão além do que uma enciclopédia tradicional pode oferecer.
           </p>
         </Card>
 
         {/* Features */}
-        <div className="mb-16">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-8 text-center">
+        <div className="mb-12">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-6 text-center">
             O Que Nos Diferencia
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
-                <Card key={feature.title} className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-lumen-glow/10 rounded-lg">
-                      <Icon className="w-6 h-6 text-lumen-navy" />
+                <Card key={feature.title} className="p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-lumen-glow/10 rounded-lg flex-shrink-0">
+                      <Icon className="w-5 h-5 text-lumen-navy" />
                     </div>
                     <div>
-                      <h3 className="font-serif text-xl font-semibold text-foreground mb-2">
+                      <h3 className="font-serif text-lg font-semibold text-foreground mb-1">
                         {feature.title}
                       </h3>
-                      <p className="text-muted-foreground">{feature.description}</p>
+                      <p className="text-sm text-muted-foreground">{feature.description}</p>
                     </div>
                   </div>
                 </Card>
@@ -93,36 +90,34 @@ export default function About() {
         </div>
 
         {/* Technology */}
-        <Card className="p-8 md:p-12 mb-16 bg-lumen-navy text-white">
-          <h2 className="font-serif text-3xl font-bold mb-6 text-center">Tecnologia</h2>
-          <div className="space-y-4 text-lg">
+        <Card className="p-8 mb-12 bg-lumen-navy text-white">
+          <h2 className="font-serif text-2xl font-bold mb-4 text-center">Tecnologia</h2>
+          <div className="space-y-3">
             <p className="leading-relaxed">
-              O Lumen utiliza modelos de linguagem avançados como <strong>Deepseek</strong> e{" "}
-              <strong>GPT</strong> para processar e extrair informações de livros, filmes,
-              séries e jogos.
+              O Lumen utiliza <strong>Deepseek</strong> e <strong>GPT</strong> para processar 
+              e extrair informações de livros, filmes, séries e jogos.
             </p>
             <p className="leading-relaxed">
-              Nossa infraestrutura é construída sobre <strong>React</strong>,{" "}
-              <strong>TypeScript</strong> e <strong>Supabase</strong>, garantindo uma
-              experiência rápida, segura e escalável.
+              Nossa infraestrutura: <strong>React</strong>, <strong>TypeScript</strong> e{" "}
+              <strong>Supabase</strong>.
             </p>
           </div>
         </Card>
 
         {/* Team */}
         <div className="text-center">
-          <h2 className="font-serif text-3xl font-bold text-foreground mb-6">
+          <h2 className="font-serif text-2xl font-bold text-foreground mb-4">
             Criado com Paixão
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            O Lumen é um projeto em constante evolução, desenvolvido por entusiastas de
-            literatura, cinema e tecnologia que acreditam no poder das histórias.
+          <p className="text-muted-foreground max-w-xl mx-auto">
+            Projeto em constante evolução, desenvolvido por entusiastas de literatura, 
+            cinema e tecnologia que acreditam no poder das histórias.
           </p>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 px-4 mt-20">
+      <footer className="border-t border-border py-8 px-4 mt-12">
         <div className="container mx-auto text-center">
           <p className="text-sm text-muted-foreground font-mono">
             Enciclopédia Interativa Multiagente de Universos Narrativos
