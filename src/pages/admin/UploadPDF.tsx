@@ -6,9 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload, Loader2, CheckCircle, Edit3, RefreshCw, Sparkles } from "lucide-react";
 import { ExtractionMonitor } from "@/components/ExtractionMonitor";
+import { ExtractedEntitiesView } from "@/components/ExtractedEntitiesView";
+import { QualityValidation } from "@/components/QualityValidation";
+import { useNavigate } from "react-router-dom";
 
 export default function UploadPDF() {
   const [file, setFile] = useState<File | null>(null);
@@ -19,7 +23,11 @@ export default function UploadPDF() {
   const [year, setYear] = useState("");
   const [processing, setProcessing] = useState(false);
   const [universeId, setUniverseId] = useState<string | null>(null);
+  const [isComplete, setIsComplete] = useState(false);
+  const [entityCounts, setEntityCounts] = useState({ characters: 0, locations: 0, events: 0, objects: 0 });
+  const [activeTab, setActiveTab] = useState("monitor");
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -135,6 +143,122 @@ export default function UploadPDF() {
     }
   };
 
+  const handleExtractionComplete = async () => {
+    setIsComplete(true);
+    setProcessing(false);
+    
+    // Fetch entity counts
+    if (universeId) {
+      const [charsRes, locsRes, eventsRes, objsRes] = await Promise.all([
+        supabase.from("characters").select("id", { count: "exact" }).eq("universe_id", universeId),
+        supabase.from("locations").select("id", { count: "exact" }).eq("universe_id", universeId),
+        supabase.from("events").select("id", { count: "exact" }).eq("universe_id", universeId),
+        supabase.from("objects").select("id", { count: "exact" }).eq("universe_id", universeId),
+      ]);
+      
+      setEntityCounts({
+        characters: charsRes.count || 0,
+        locations: locsRes.count || 0,
+        events: eventsRes.count || 0,
+        objects: objsRes.count || 0,
+      });
+    }
+    
+    toast({
+      title: "Extração concluída!",
+      description: "Revise a qualidade e as entidades extraídas.",
+    });
+  };
+
+  const handlePublish = async () => {
+    if (!universeId) return;
+    
+    try {
+      const { error } = await supabase
+        .from("universes")
+        .update({ status: "active" })
+        .eq("id", universeId);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Universo publicado!",
+        description: "O universo está agora visível publicamente.",
+      });
+      
+      navigate(`/universe/${universeId}`);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao publicar",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEdit = () => {
+    setActiveTab("entities");
+    toast({
+      title: "Modo de edição",
+      description: "Revise e edite as entidades extraídas.",
+    });
+  };
+
+  const handleReprocess = async () => {
+    if (!universeId) return;
+    
+    setIsComplete(false);
+    setProcessing(true);
+    setActiveTab("monitor");
+    
+    try {
+      // Reset processing job
+      await supabase
+        .from("processing_jobs")
+        .update({
+          status: "processing",
+          progress: 0,
+          current_step: "Reiniciando extração",
+        })
+        .eq("universe_id", universeId);
+      
+      // Delete existing entities
+      await Promise.all([
+        supabase.from("characters").delete().eq("universe_id", universeId),
+        supabase.from("locations").delete().eq("universe_id", universeId),
+        supabase.from("events").delete().eq("universe_id", universeId),
+        supabase.from("objects").delete().eq("universe_id", universeId),
+      ]);
+      
+      // Re-invoke processing
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const pdfText = event.target?.result as string;
+          await supabase.functions.invoke('process-pdf', {
+            body: {
+              universeId,
+              pdfText: pdfText.substring(0, 10000),
+            },
+          });
+        };
+        reader.readAsText(file);
+      }
+      
+      toast({
+        title: "Reprocessando",
+        description: "Iniciando nova extração do PDF.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao reprocessar",
+        description: error.message,
+        variant: "destructive",
+      });
+      setProcessing(false);
+    }
+  };
+
   const handleReset = () => {
     setFile(null);
     setName("");
@@ -144,6 +268,8 @@ export default function UploadPDF() {
     setYear("");
     setProcessing(false);
     setUniverseId(null);
+    setIsComplete(false);
+    setActiveTab("monitor");
   };
 
   return (
@@ -153,120 +279,105 @@ export default function UploadPDF() {
         Faça upload de um PDF para criar automaticamente um novo universo narrativo
       </p>
 
-      <Card className="p-8 max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* File Upload */}
-          <div>
-            <Label className="text-lumen-navy mb-2 block">Arquivo PDF *</Label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-golden transition-colors">
-              <Input
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                id="pdf-upload"
-                disabled={processing}
-              />
-              <label htmlFor="pdf-upload" className="cursor-pointer">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lumen-navy font-medium mb-1">
-                  {file ? file.name : "Clique para selecionar ou arraste um arquivo"}
-                </p>
-                <p className="text-sm text-gray-500">PDF até 50MB</p>
-              </label>
-            </div>
-          </div>
-
-          {/* Universe Details */}
-          <div>
-            <Label htmlFor="name" className="text-lumen-navy">Nome do Universo *</Label>
-            <Input
-              id="name"
-              placeholder="ex: Harry Potter e a Pedra Filosofal"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={100}
-              disabled={processing}
-              className="mt-1"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="description" className="text-lumen-navy">Descrição *</Label>
-            <Textarea
-              id="description"
-              placeholder="ex: O primeiro livro da série Harry Potter"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              maxLength={500}
-              rows={3}
-              disabled={processing}
-              className="mt-1"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="sourceType" className="text-lumen-navy">Tipo de Fonte *</Label>
-            <Select value={sourceType} onValueChange={setSourceType} disabled={processing}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Selecione o tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Livro">📚 Livro</SelectItem>
-                <SelectItem value="Filme">🎬 Filme</SelectItem>
-                <SelectItem value="Série">📺 Série</SelectItem>
-                <SelectItem value="Jogo">🎮 Jogo</SelectItem>
-                <SelectItem value="Outro">📋 Outro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+      {/* Upload Form - Only show if not processing */}
+      {!universeId && (
+        <Card className="p-8 max-w-2xl">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <Label htmlFor="author" className="text-lumen-navy">Autor/Criador</Label>
+              <Label className="text-lumen-navy mb-2 block">Arquivo PDF *</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-golden transition-colors">
+                <Input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="pdf-upload"
+                  disabled={processing}
+                />
+                <label htmlFor="pdf-upload" className="cursor-pointer">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-lumen-navy font-medium mb-1">
+                    {file ? file.name : "Clique para selecionar ou arraste um arquivo"}
+                  </p>
+                  <p className="text-sm text-gray-500">PDF até 50MB</p>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="name" className="text-lumen-navy">Nome do Universo *</Label>
               <Input
-                id="author"
-                placeholder="ex: J.K. Rowling"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
+                id="name"
+                placeholder="ex: Harry Potter e a Pedra Filosofal"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
                 disabled={processing}
                 className="mt-1"
               />
             </div>
 
             <div>
-              <Label htmlFor="year" className="text-lumen-navy">Ano de Publicação</Label>
-              <Input
-                id="year"
-                type="number"
-                placeholder="ex: 1997"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                min="1000"
-                max="2100"
+              <Label htmlFor="description" className="text-lumen-navy">Descrição *</Label>
+              <Textarea
+                id="description"
+                placeholder="ex: O primeiro livro da série Harry Potter"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+                maxLength={500}
+                rows={3}
                 disabled={processing}
                 className="mt-1"
               />
             </div>
-          </div>
 
-          {/* Extraction Monitor */}
-          {universeId && (
-            <ExtractionMonitor 
-              universeId={universeId}
-              onComplete={() => {
-                toast({
-                  title: "Sucesso!",
-                  description: "Universo criado e processado com sucesso.",
-                });
-              }}
-            />
-          )}
+            <div>
+              <Label htmlFor="sourceType" className="text-lumen-navy">Tipo de Fonte *</Label>
+              <Select value={sourceType} onValueChange={setSourceType} disabled={processing}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Livro">📚 Livro</SelectItem>
+                  <SelectItem value="Filme">🎬 Filme</SelectItem>
+                  <SelectItem value="Série">📺 Série</SelectItem>
+                  <SelectItem value="Jogo">🎮 Jogo</SelectItem>
+                  <SelectItem value="Outro">📋 Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Buttons */}
-          {!universeId && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="author" className="text-lumen-navy">Autor/Criador</Label>
+                <Input
+                  id="author"
+                  placeholder="ex: J.K. Rowling"
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  disabled={processing}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="year" className="text-lumen-navy">Ano de Publicação</Label>
+                <Input
+                  id="year"
+                  type="number"
+                  placeholder="ex: 1997"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  min="1000"
+                  max="2100"
+                  disabled={processing}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
             <div className="flex gap-4">
               <Button
                 type="submit"
@@ -291,21 +402,86 @@ export default function UploadPDF() {
                 Cancelar
               </Button>
             </div>
+          </form>
+        </Card>
+      )}
+
+      {/* Processing View with Tabs */}
+      {universeId && (
+        <div className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="monitor">Monitoramento</TabsTrigger>
+              <TabsTrigger value="entities" disabled={!isComplete}>Entidades</TabsTrigger>
+              <TabsTrigger value="quality" disabled={!isComplete}>Qualidade</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="monitor" className="space-y-6">
+              <ExtractionMonitor 
+                universeId={universeId}
+                onComplete={handleExtractionComplete}
+              />
+            </TabsContent>
+
+            <TabsContent value="entities" className="space-y-6">
+              {isComplete && (
+                <Card className="p-6">
+                  <ExtractedEntitiesView universeId={universeId} />
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="quality" className="space-y-6">
+              {isComplete && (
+                <QualityValidation
+                  universeId={universeId}
+                  entityCounts={entityCounts}
+                  onAccept={handlePublish}
+                  onReview={handleEdit}
+                  onReprocess={handleReprocess}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {/* Final Action Buttons */}
+          {isComplete && (
+            <Card className="p-6">
+              <div className="flex gap-4">
+                <Button
+                  onClick={handlePublish}
+                  className="flex-1 bg-lumen-navy hover:bg-lumen-navy/90 text-white"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Publicar Universo
+                </Button>
+                <Button
+                  onClick={handleEdit}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Editar Entidades
+                </Button>
+                <Button
+                  onClick={handleReprocess}
+                  variant="outline"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reprocessar
+                </Button>
+              </div>
+              <Button
+                onClick={handleReset}
+                variant="ghost"
+                className="w-full mt-4"
+              >
+                Novo Upload
+              </Button>
+            </Card>
           )}
-          
-          {/* Reset Button after completion */}
-          {universeId && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              className="w-full"
-            >
-              Novo Upload
-            </Button>
-          )}
-        </form>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }
