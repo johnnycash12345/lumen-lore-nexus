@@ -90,7 +90,7 @@ export default function Auth() {
           <Logo />
         </div>
 
-        <h1 className="text-3xl font-serif text-navy text-center mb-2">
+        <h1 className="text-3xl font-serif text-lumen-navy text-center mb-2">
           {isLogin ? "Login" : "Criar Conta"}
         </h1>
         <p className="text-gray-600 text-center mb-6">
@@ -100,7 +100,7 @@ export default function Auth() {
         <form onSubmit={handleAuth} className="space-y-4">
           {!isLogin && (
             <div>
-              <Label htmlFor="fullName" className="text-navy">Nome Completo</Label>
+              <Label htmlFor="fullName" className="text-lumen-navy">Nome Completo</Label>
               <Input
                 id="fullName"
                 type="text"
@@ -114,7 +114,7 @@ export default function Auth() {
           )}
 
           <div>
-            <Label htmlFor="email" className="text-navy">Email</Label>
+            <Label htmlFor="email" className="text-lumen-navy">Email</Label>
             <Input
               id="email"
               type="email"
@@ -127,7 +127,7 @@ export default function Auth() {
           </div>
 
           <div>
-            <Label htmlFor="password" className="text-navy">Senha</Label>
+            <Label htmlFor="password" className="text-lumen-navy">Senha</Label>
             <Input
               id="password"
               type="password"
@@ -142,7 +142,7 @@ export default function Auth() {
 
           <Button
             type="submit"
-            className="w-full bg-navy hover:bg-navy/90 text-white"
+            className="w-full bg-lumen-navy hover:bg-lumen-navy/90 text-white font-semibold"
             disabled={loading}
           >
             {loading ? (
@@ -159,7 +159,7 @@ export default function Auth() {
         <div className="mt-6 text-center">
           <button
             onClick={() => setIsLogin(!isLogin)}
-            className="text-navy hover:underline text-sm"
+            className="text-lumen-navy hover:underline text-sm font-medium"
           >
             {isLogin
               ? "Não tem uma conta? Criar conta"
@@ -170,7 +170,7 @@ export default function Auth() {
         <div className="mt-4 text-center">
           <button
             onClick={() => navigate("/")}
-            className="text-gray-600 hover:text-navy text-sm"
+            className="text-gray-600 hover:text-lumen-navy text-sm"
           >
             ← Voltar para Home
           </button>
