@@ -7,8 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
+import { Upload, Loader2 } from "lucide-react";
+import { ExtractionMonitor } from "@/components/ExtractionMonitor";
 
 export default function UploadPDF() {
   const [file, setFile] = useState<File | null>(null);
@@ -18,9 +18,7 @@ export default function UploadPDF() {
   const [author, setAuthor] = useState("");
   const [year, setYear] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [universeId, setUniverseId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,9 +56,6 @@ export default function UploadPDF() {
     }
 
     setProcessing(true);
-    setProgress(10);
-    setCurrentStep("Validando arquivo");
-    setSuccess(false);
 
     try {
       // Get current user
@@ -68,9 +63,6 @@ export default function UploadPDF() {
       if (!user) throw new Error("User not authenticated");
 
       // Create universe
-      setProgress(20);
-      setCurrentStep("Criando universo");
-
       const { data: universe, error: universeError } = await supabase
         .from("universes")
         .insert({
@@ -99,19 +91,16 @@ export default function UploadPDF() {
 
       if (jobError) throw jobError;
 
-      // Read PDF content (simplified - in production use a proper PDF parser)
-      setProgress(40);
-      setCurrentStep("Extraindo texto do PDF");
+      // Set universe ID to show monitor
+      setUniverseId(universe.id);
 
+      // Read PDF content (simplified - in production use a proper PDF parser)
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
           const pdfText = event.target?.result as string;
           
           // Call edge function to process with Deepseek
-          setProgress(50);
-          setCurrentStep("Processando com IA");
-
           const { error: functionError } = await supabase.functions.invoke('process-pdf', {
             body: {
               universeId: universe.id,
@@ -121,29 +110,6 @@ export default function UploadPDF() {
 
           if (functionError) throw functionError;
 
-          setProgress(100);
-          setCurrentStep("Concluído");
-          setSuccess(true);
-
-          toast({
-            title: "Sucesso!",
-            description: "Universo criado e processado com sucesso.",
-          });
-
-          // Reset form
-          setTimeout(() => {
-            setFile(null);
-            setName("");
-            setDescription("");
-            setSourceType("");
-            setAuthor("");
-            setYear("");
-            setProcessing(false);
-            setProgress(0);
-            setCurrentStep("");
-            setSuccess(false);
-          }, 3000);
-
         } catch (error: any) {
           console.error("Error processing PDF:", error);
           toast({
@@ -152,6 +118,7 @@ export default function UploadPDF() {
             variant: "destructive",
           });
           setProcessing(false);
+          setUniverseId(null);
         }
       };
 
@@ -168,9 +135,20 @@ export default function UploadPDF() {
     }
   };
 
+  const handleReset = () => {
+    setFile(null);
+    setName("");
+    setDescription("");
+    setSourceType("");
+    setAuthor("");
+    setYear("");
+    setProcessing(false);
+    setUniverseId(null);
+  };
+
   return (
     <div>
-      <h1 className="text-3xl font-serif text-navy mb-2">Upload de PDF</h1>
+      <h1 className="text-3xl font-serif text-lumen-navy mb-2">Upload de PDF</h1>
       <p className="text-gray-600 mb-8">
         Faça upload de um PDF para criar automaticamente um novo universo narrativo
       </p>
@@ -179,7 +157,7 @@ export default function UploadPDF() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* File Upload */}
           <div>
-            <Label className="text-navy mb-2 block">Arquivo PDF *</Label>
+            <Label className="text-lumen-navy mb-2 block">Arquivo PDF *</Label>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-golden transition-colors">
               <Input
                 type="file"
@@ -191,7 +169,7 @@ export default function UploadPDF() {
               />
               <label htmlFor="pdf-upload" className="cursor-pointer">
                 <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-navy font-medium mb-1">
+                <p className="text-lumen-navy font-medium mb-1">
                   {file ? file.name : "Clique para selecionar ou arraste um arquivo"}
                 </p>
                 <p className="text-sm text-gray-500">PDF até 50MB</p>
@@ -201,7 +179,7 @@ export default function UploadPDF() {
 
           {/* Universe Details */}
           <div>
-            <Label htmlFor="name" className="text-navy">Nome do Universo *</Label>
+            <Label htmlFor="name" className="text-lumen-navy">Nome do Universo *</Label>
             <Input
               id="name"
               placeholder="ex: Harry Potter e a Pedra Filosofal"
@@ -215,7 +193,7 @@ export default function UploadPDF() {
           </div>
 
           <div>
-            <Label htmlFor="description" className="text-navy">Descrição *</Label>
+            <Label htmlFor="description" className="text-lumen-navy">Descrição *</Label>
             <Textarea
               id="description"
               placeholder="ex: O primeiro livro da série Harry Potter"
@@ -230,7 +208,7 @@ export default function UploadPDF() {
           </div>
 
           <div>
-            <Label htmlFor="sourceType" className="text-navy">Tipo de Fonte *</Label>
+            <Label htmlFor="sourceType" className="text-lumen-navy">Tipo de Fonte *</Label>
             <Select value={sourceType} onValueChange={setSourceType} disabled={processing}>
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Selecione o tipo" />
@@ -247,7 +225,7 @@ export default function UploadPDF() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="author" className="text-navy">Autor/Criador</Label>
+              <Label htmlFor="author" className="text-lumen-navy">Autor/Criador</Label>
               <Input
                 id="author"
                 placeholder="ex: J.K. Rowling"
@@ -259,7 +237,7 @@ export default function UploadPDF() {
             </div>
 
             <div>
-              <Label htmlFor="year" className="text-navy">Ano de Publicação</Label>
+              <Label htmlFor="year" className="text-lumen-navy">Ano de Publicação</Label>
               <Input
                 id="year"
                 type="number"
@@ -274,60 +252,58 @@ export default function UploadPDF() {
             </div>
           </div>
 
-          {/* Processing Status */}
-          {processing && (
-            <div className="space-y-3 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-navy">{currentStep}</span>
-                <span className="text-sm text-gray-600">{progress}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-              <p className="text-xs text-gray-600">
-                Tempo estimado: 2-5 minutos
-              </p>
-            </div>
-          )}
-
-          {/* Success Message */}
-          {success && (
-            <div className="flex items-center gap-2 p-4 bg-green-50 rounded-lg text-green-700">
-              <CheckCircle2 className="w-5 h-5" />
-              <span className="font-medium">Universo criado com sucesso!</span>
-            </div>
+          {/* Extraction Monitor */}
+          {universeId && (
+            <ExtractionMonitor 
+              universeId={universeId}
+              onComplete={() => {
+                toast({
+                  title: "Sucesso!",
+                  description: "Universo criado e processado com sucesso.",
+                });
+              }}
+            />
           )}
 
           {/* Buttons */}
-          <div className="flex gap-4">
-            <Button
-              type="submit"
-              disabled={!file || !name || !description || !sourceType || processing}
-              className="flex-1 bg-navy hover:bg-navy/90 text-white"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                "Processar PDF"
-              )}
-            </Button>
+          {!universeId && (
+            <div className="flex gap-4">
+              <Button
+                type="submit"
+                disabled={!file || !name || !description || !sourceType || processing}
+                className="flex-1 bg-lumen-navy hover:bg-lumen-navy/90 text-white"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Iniciando processamento...
+                  </>
+                ) : (
+                  "Processar PDF"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReset}
+                disabled={processing}
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+          
+          {/* Reset Button after completion */}
+          {universeId && (
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setFile(null);
-                setName("");
-                setDescription("");
-                setSourceType("");
-                setAuthor("");
-                setYear("");
-              }}
-              disabled={processing}
+              onClick={handleReset}
+              className="w-full"
             >
-              Cancelar
+              Novo Upload
             </Button>
-          </div>
+          )}
         </form>
       </Card>
     </div>
