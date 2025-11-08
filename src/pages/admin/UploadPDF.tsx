@@ -19,6 +19,32 @@ import { UniverseChat } from "@/components/UniverseChat";
 import { InteractiveTimeline } from "@/components/InteractiveTimeline";
 import { RelationshipMatrix } from "@/components/RelationshipMatrix";
 import { useNavigate } from "react-router-dom";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+/**
+ * Extrai texto de um arquivo PDF
+ */
+async function extractTextFromPDF(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  
+  let fullText = '';
+  
+  // Extrair texto de cada página
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    fullText += pageText + '\n\n';
+  }
+  
+  return fullText.trim();
+}
 
 export default function UploadPDF() {
   const [file, setFile] = useState<File | null>(null);
@@ -108,35 +134,46 @@ export default function UploadPDF() {
       // Set universe ID to show monitor
       setUniverseId(universe.id);
 
-      // Read PDF content (simplified - in production use a proper PDF parser)
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const pdfText = event.target?.result as string;
-          
-          // Call edge function to process with Deepseek
-          const { error: functionError } = await supabase.functions.invoke('process-pdf', {
-            body: {
-              universeId: universe.id,
-              pdfText: pdfText.substring(0, 10000), // Limit for demo
-            },
-          });
+      // Extract text from PDF properly
+      try {
+        toast({
+          title: "Extraindo texto do PDF...",
+          description: "Isso pode levar alguns segundos.",
+        });
 
-          if (functionError) throw functionError;
-
-        } catch (error: any) {
-          console.error("Error processing PDF:", error);
-          toast({
-            title: "Erro no processamento",
-            description: error.message || "Ocorreu um erro ao processar o PDF.",
-            variant: "destructive",
-          });
-          setProcessing(false);
-          setUniverseId(null);
+        const pdfText = await extractTextFromPDF(file);
+        
+        if (!pdfText || pdfText.length < 100) {
+          throw new Error("Não foi possível extrair texto do PDF. Verifique se o arquivo contém texto selecionável.");
         }
-      };
 
-      reader.readAsText(file);
+        console.log(`Extracted ${pdfText.length} characters from PDF`);
+        
+        toast({
+          title: "Texto extraído!",
+          description: `Extraídos ${pdfText.length} caracteres. Iniciando processamento...`,
+        });
+
+        // Call edge function to process with Deepseek
+        const { error: functionError } = await supabase.functions.invoke('process-pdf', {
+          body: {
+            universeId: universe.id,
+            pdfText: pdfText, // Send full extracted text
+          },
+        });
+
+        if (functionError) throw functionError;
+
+      } catch (error: any) {
+        console.error("Error processing PDF:", error);
+        toast({
+          title: "Erro no processamento",
+          description: error.message || "Ocorreu um erro ao processar o PDF.",
+          variant: "destructive",
+        });
+        setProcessing(false);
+        setUniverseId(null);
+      }
 
     } catch (error: any) {
       console.error("Error creating universe:", error);
