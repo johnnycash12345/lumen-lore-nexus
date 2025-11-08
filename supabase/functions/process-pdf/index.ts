@@ -2,6 +2,12 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { analyzeRelationships } from '../shared/deepseek-utils.ts';
+import { Logger } from './logger.ts';
+import { callDeepseek, extractJSON } from './deepseek-utils.ts';
+import { validatePdfText, validateExtractedEntities, sanitizeExtractedData } from './validation-utils.ts';
+import { ProcessingErrorHandler } from './error-handler.ts';
+import { consolidateCharacters, consolidateLocations, consolidateEvents, consolidateObjects } from './consolidation-utils.ts';
+import { ProcessingResult } from './types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,321 +22,36 @@ function generateSlug(text: string): string {
     .toLowerCase()
     .trim()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-    .replace(/[^\w\s-]/g, '') // Remove caracteres especiais
-    .replace(/\s+/g, '-') // Substitui espaços por hífens
-    .replace(/-+/g, '-') // Remove hífens duplicados
-    .replace(/^-+|-+$/g, ''); // Remove hífens no início/fim
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
-// ===== FUZZY MATCHING UTILITIES =====
-
 /**
- * Calcula a distância de edição (Levenshtein distance) entre duas strings
+ * Atualiza o progresso do job de processamento
  */
-function getEditDistance(s1: string, s2: string): number {
-  const costs: number[] = [];
+async function updateProgress(
+  supabaseClient: any,
+  universeId: string,
+  step: string,
+  progress: number,
+  logger: Logger
+) {
+  try {
+    await supabaseClient
+      .from('processing_jobs')
+      .update({
+        current_step: step,
+        progress,
+      })
+      .eq('universe_id', universeId);
 
-  for (let i = 0; i <= s1.length; i++) {
-    let lastValue = i;
-    for (let j = 0; j <= s2.length; j++) {
-      if (i === 0) {
-        costs[j] = j;
-      } else if (j > 0) {
-        let newValue = costs[j - 1];
-        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-        }
-        costs[j - 1] = lastValue;
-        lastValue = newValue;
-      }
-    }
-    if (i > 0) costs[s2.length] = lastValue;
+    logger.debug('Progress Update', `${step} - ${progress}%`);
+  } catch (error: any) {
+    logger.warn('Progress Update', `Failed to update progress: ${error.message}`);
   }
-
-  return costs[s2.length];
-}
-
-/**
- * Calcula a similaridade entre duas strings usando Levenshtein distance
- * Retorna um valor entre 0 e 1 (1 = idêntico, 0 = completamente diferente)
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-
-  if (s1 === s2) return 1;
-  if (s1.length === 0 || s2.length === 0) return 0;
-
-  const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
-
-  if (longer.length === 0) return 1;
-
-  const editDistance = getEditDistance(longer, shorter);
-  return (longer.length - editDistance) / longer.length;
-}
-
-/**
- * Verifica se uma string contém outra (para detectar aliases)
- */
-function isSubstring(str1: string, str2: string): boolean {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  return s1.includes(s2) || s2.includes(s1);
-}
-
-/**
- * Encontra duplicatas em um array de entidades
- */
-function findDuplicates(
-  entities: any[],
-  nameField: string = 'name',
-  threshold: number = 0.8
-): Map<number, number[]> {
-  const duplicates = new Map<number, number[]>();
-
-  for (let i = 0; i < entities.length; i++) {
-    if (duplicates.has(i)) continue;
-
-    const group: number[] = [i];
-
-    for (let j = i + 1; j < entities.length; j++) {
-      if (duplicates.has(j)) continue;
-
-      const name1 = entities[i][nameField];
-      const name2 = entities[j][nameField];
-
-      if (name1.toLowerCase() === name2.toLowerCase()) {
-        group.push(j);
-        continue;
-      }
-
-      if (isSubstring(name1, name2)) {
-        group.push(j);
-        continue;
-      }
-
-      const similarity = calculateSimilarity(name1, name2);
-      if (similarity >= threshold) {
-        group.push(j);
-      }
-    }
-
-    if (group.length > 1) {
-      duplicates.set(i, group);
-    }
-  }
-
-  return duplicates;
-}
-
-// ===== CONSOLIDATION FUNCTIONS =====
-
-/**
- * Mescla múltiplos personagens em um
- */
-function mergeCharacters(characters: any[]): any {
-  if (characters.length === 0) return null;
-  if (characters.length === 1) return characters[0];
-
-  const base = characters.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
-
-  const allAliases = new Set<string>();
-  characters.forEach(char => {
-    if (char.name) allAliases.add(char.name);
-    if (char.aliases && Array.isArray(char.aliases)) {
-      char.aliases.forEach((alias: string) => allAliases.add(alias));
-    }
-  });
-  allAliases.delete(base.name);
-
-  const allAbilities = new Set<string>();
-  characters.forEach(char => {
-    if (char.abilities && Array.isArray(char.abilities)) {
-      char.abilities.forEach((ability: string) => allAbilities.add(ability));
-    }
-  });
-
-  const roleHierarchy: Record<string, number> = { 
-    'Protagonista': 3, 
-    'Antagonista': 2, 
-    'Secundário': 1, 
-    'Menor': 0 
-  };
-  
-  const bestRole = characters.reduce((prev, curr) => {
-    const prevScore = roleHierarchy[prev.role] || 0;
-    const currScore = roleHierarchy[curr.role] || 0;
-    return currScore > prevScore ? curr : prev;
-  }).role;
-
-  return {
-    ...base,
-    name: base.name,
-    aliases: Array.from(allAliases),
-    role: bestRole,
-    abilities: Array.from(allAbilities),
-    personality: base.personality || characters.find(c => c.personality)?.personality,
-    occupation: base.occupation || characters.find(c => c.occupation)?.occupation,
-  };
-}
-
-/**
- * Consolida personagens duplicados
- */
-function consolidateCharacters(characters: any[]): any[] {
-  if (!characters || characters.length === 0) return [];
-
-  const duplicates = findDuplicates(characters, 'name', 0.8);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < characters.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeCharacters(group.map(idx => characters[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
-  }
-
-  return consolidated;
-}
-
-/**
- * Mescla múltiplos locais em um
- */
-function mergeLocations(locations: any[]): any {
-  if (locations.length === 0) return null;
-  if (locations.length === 1) return locations[0];
-
-  const base = locations.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
-
-  return {
-    ...base,
-    type: base.type || locations.find(l => l.type)?.type,
-    country: base.country || locations.find(l => l.country)?.country,
-    significance: base.significance || locations.find(l => l.significance)?.significance,
-  };
-}
-
-/**
- * Consolida locais duplicados
- */
-function consolidateLocations(locations: any[]): any[] {
-  if (!locations || locations.length === 0) return [];
-
-  const duplicates = findDuplicates(locations, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < locations.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeLocations(group.map(idx => locations[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
-  }
-
-  return consolidated;
-}
-
-/**
- * Mescla múltiplos eventos em um
- */
-function mergeEvents(events: any[]): any {
-  if (events.length === 0) return null;
-  if (events.length === 1) return events[0];
-
-  const base = events.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
-
-  const involvedCharacters = new Set<string>();
-  events.forEach(evt => {
-    if (evt.characters_involved && Array.isArray(evt.characters_involved)) {
-      evt.characters_involved.forEach((char: string) => involvedCharacters.add(char));
-    }
-  });
-
-  return {
-    ...base,
-    date: base.date || events.find(e => e.date)?.date,
-    significance: base.significance || events.find(e => e.significance)?.significance,
-    characters_involved: Array.from(involvedCharacters),
-  };
-}
-
-/**
- * Consolida eventos duplicados
- */
-function consolidateEvents(events: any[]): any[] {
-  if (!events || events.length === 0) return [];
-
-  const duplicates = findDuplicates(events, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < events.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeEvents(group.map(idx => events[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
-  }
-
-  return consolidated;
-}
-
-/**
- * Mescla múltiplos objetos em um
- */
-function mergeObjects(objects: any[]): any {
-  if (objects.length === 0) return null;
-  if (objects.length === 1) return objects[0];
-
-  const base = objects.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
-
-  return {
-    ...base,
-    type: base.type || objects.find(o => o.type)?.type,
-    powers: base.powers || objects.find(o => o.powers)?.powers,
-  };
-}
-
-/**
- * Consolida objetos duplicados
- */
-function consolidateObjects(objects: any[]): any[] {
-  if (!objects || objects.length === 0) return [];
-
-  const duplicates = findDuplicates(objects, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < objects.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeObjects(group.map(idx => objects[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
-  }
-
-  return consolidated;
 }
 
 serve(async (req) => {
@@ -338,39 +59,57 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  let universeId: string | null = null;
+  let logger: Logger | null = null;
+
   try {
+    // ===== FASE 0: INICIALIZAÇÃO =====
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { universeId, pdfText } = await req.json();
-    
-    if (!universeId || !pdfText) {
-      throw new Error('Missing required fields');
+    const { universeId: inputUniverseId, pdfText } = await req.json();
+
+    if (!inputUniverseId || !pdfText) {
+      throw new ProcessingErrorHandler(
+        'INVALID_INPUT',
+        'Missing required fields: universeId, pdfText',
+        'Initialization',
+        false
+      );
     }
 
-    console.log(`Processing PDF for universe: ${universeId}`);
+    universeId = inputUniverseId;
+    logger = new Logger(inputUniverseId);
 
-    // Update processing job
-    await supabaseClient
-      .from('processing_jobs')
-      .update({ 
-        status: 'processing', 
-        current_step: 'Extraindo entidades com IA',
-        progress: 30 
-      })
-      .eq('universe_id', universeId);
+    logger.info('Initialization', `Starting PDF processing for universe: ${inputUniverseId}`);
 
-    const deepseekApiKey = Deno.env.get('DEEPSEEK_API_KEY');
-    if (!deepseekApiKey) {
-      throw new Error('DEEPSEEK_API_KEY not configured');
+    // ===== FASE 1: VALIDAÇÃO DO PDF =====
+    logger.info('PDF Validation', 'Validating PDF text...');
+
+    const pdfValidation = validatePdfText(pdfText);
+    if (!pdfValidation.valid) {
+      throw new ProcessingErrorHandler(
+        'INVALID_PDF',
+        `PDF validation failed: ${pdfValidation.errors.join(', ')}`,
+        'PDF Validation',
+        false
+      );
     }
 
-    // Call Deepseek API to extract entities
-    const prompt = `Analise o seguinte texto de um universo literário e extraia as entidades em formato JSON:
+    logger.info('PDF Validation', `PDF is valid (${pdfText.length} characters)`);
 
-Texto:
+    await updateProgress(supabaseClient, inputUniverseId, 'Validação do PDF', 10, logger);
+
+    // ===== FASE 2: EXTRAÇÃO DE ENTIDADES =====
+    await updateProgress(supabaseClient, inputUniverseId, 'Extraindo entidades com IA', 30, logger);
+    logger.info('Entity Extraction', 'Extracting entities with Deepseek...');
+
+    const extractionPrompt = `Analise o seguinte texto de um universo literário e extraia as entidades em formato JSON.
+
+Texto (primeiras 8000 caracteres):
 ${pdfText.substring(0, 8000)}
 
 Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem explicações):
@@ -380,7 +119,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       "name": "Nome do personagem",
       "aliases": ["apelido1", "apelido2"],
       "description": "Descrição detalhada",
-      "role": "Protagonista/Antagonista/Secundário",
+      "role": "Protagonista/Antagonista/Secundário/Menor",
       "abilities": ["habilidade1", "habilidade2"],
       "personality": "Descrição da personalidade",
       "occupation": "Ocupação"
@@ -413,113 +152,82 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
   ]
 }`;
 
-    console.log('Calling Deepseek API...');
-    
-    const deepseekResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${deepseekApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: 'Você é um especialista em análise literária. Retorne apenas JSON válido, sem markdown.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 4000,
-      }),
-    });
+    const extractionResponse = await callDeepseek(
+      extractionPrompt,
+      'Você é um especialista em extração de entidades de textos literários. Retorne apenas JSON válido, sem markdown.',
+      { temperature: 0.3, maxTokens: 4000 },
+      logger,
+      'Entity Extraction'
+    );
 
-    if (!deepseekResponse.ok) {
-      const errorText = await deepseekResponse.text();
-      console.error('Deepseek API error:', deepseekResponse.status, errorText);
-      throw new Error(`Deepseek API error: ${deepseekResponse.status}`);
+    let entities = extractJSON(extractionResponse, logger, 'Entity Extraction');
+
+    // Validate extracted entities
+    const entityValidation = validateExtractedEntities(entities);
+    if (!entityValidation.valid) {
+      logger.warn('Entity Extraction', `Validation warnings: ${entityValidation.errors.join(', ')}`);
     }
 
-    const deepseekData = await deepseekResponse.json();
-    const content = deepseekData.choices[0].message.content;
-    
-    console.log('Deepseek response:', content);
+    // Sanitize data
+    entities = sanitizeExtractedData(entities);
 
-    // Parse the JSON response
-    let entities;
-    try {
-      // Remove markdown code blocks if present
-      const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      entities = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error('Failed to parse Deepseek response:', content);
-      throw new Error('Failed to parse AI response');
-    }
+    logger.info('Entity Extraction', `Extracted ${entities.characters?.length || 0} characters, ${entities.locations?.length || 0} locations, ${entities.events?.length || 0} events, ${entities.objects?.length || 0} objects`);
 
-    // ===== FASE 5: CONSOLIDAR DUPLICATAS =====
-    
-    console.log('Consolidating duplicate entities...');
+    await updateProgress(supabaseClient, inputUniverseId, 'Extração concluída', 40, logger);
 
-    await supabaseClient
-      .from('processing_jobs')
-      .update({ 
-        current_step: 'Consolidando entidades duplicadas',
-        progress: 50 
-      })
-      .eq('universe_id', universeId);
+    // ===== FASE 3: CONSOLIDAÇÃO =====
+    logger.info('Consolidation', 'Consolidating duplicate entities...');
+    await updateProgress(supabaseClient, inputUniverseId, 'Consolidando entidades duplicadas', 50, logger);
+
+    let consolidationsPerformed = 0;
 
     try {
-      // Consolidate characters
       if (entities.characters && entities.characters.length > 0) {
         const originalCount = entities.characters.length;
         entities.characters = consolidateCharacters(entities.characters);
         const removedCount = originalCount - entities.characters.length;
-        console.log(`Characters: ${originalCount} → ${entities.characters.length} (removed ${removedCount} duplicates)`);
+        consolidationsPerformed += removedCount;
+        logger.info('Consolidation', `Characters: ${originalCount} → ${entities.characters.length} (removed ${removedCount} duplicates)`);
       }
 
-      // Consolidate locations
       if (entities.locations && entities.locations.length > 0) {
         const originalCount = entities.locations.length;
         entities.locations = consolidateLocations(entities.locations);
         const removedCount = originalCount - entities.locations.length;
-        console.log(`Locations: ${originalCount} → ${entities.locations.length} (removed ${removedCount} duplicates)`);
+        consolidationsPerformed += removedCount;
+        logger.info('Consolidation', `Locations: ${originalCount} → ${entities.locations.length} (removed ${removedCount} duplicates)`);
       }
 
-      // Consolidate events
       if (entities.events && entities.events.length > 0) {
         const originalCount = entities.events.length;
         entities.events = consolidateEvents(entities.events);
         const removedCount = originalCount - entities.events.length;
-        console.log(`Events: ${originalCount} → ${entities.events.length} (removed ${removedCount} duplicates)`);
+        consolidationsPerformed += removedCount;
+        logger.info('Consolidation', `Events: ${originalCount} → ${entities.events.length} (removed ${removedCount} duplicates)`);
       }
 
-      // Consolidate objects
       if (entities.objects && entities.objects.length > 0) {
         const originalCount = entities.objects.length;
         entities.objects = consolidateObjects(entities.objects);
         const removedCount = originalCount - entities.objects.length;
-        console.log(`Objects: ${originalCount} → ${entities.objects.length} (removed ${removedCount} duplicates)`);
+        consolidationsPerformed += removedCount;
+        logger.info('Consolidation', `Objects: ${originalCount} → ${entities.objects.length} (removed ${removedCount} duplicates)`);
       }
 
-      console.log('Consolidation completed');
-
+      logger.info('Consolidation', `Total consolidations: ${consolidationsPerformed}`);
     } catch (error: any) {
-      console.error('Error consolidating entities:', error);
-      // Continue processing even if consolidation fails
+      logger.error('Consolidation', 'Error consolidating entities', error);
     }
 
-    // Update progress
-    await supabaseClient
-      .from('processing_jobs')
-      .update({ 
-        current_step: 'Criando entidades no banco de dados',
-        progress: 60 
-      })
-      .eq('universe_id', universeId);
+    // ===== FASE 4: INSERÇÃO NO BANCO DE DADOS =====
+    await updateProgress(supabaseClient, inputUniverseId, 'Criando entidades no banco de dados', 60, logger);
+    logger.info('Database Insertion', 'Inserting entities into database...');
 
     // Insert characters and capture IDs
     let characters: any[] = [];
     if (entities.characters && entities.characters.length > 0) {
       const charactersToInsert = entities.characters.map((char: any) => ({
-        universe_id: universeId,
+        universe_id: inputUniverseId,
         name: char.name,
         aliases: char.aliases || [],
         description: char.description,
@@ -546,7 +254,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     let locations: any[] = [];
     if (entities.locations && entities.locations.length > 0) {
       const locationsToInsert = entities.locations.map((loc: any) => ({
-        universe_id: universeId,
+        universe_id: inputUniverseId,
         name: loc.name,
         type: loc.type,
         description: loc.description,
@@ -571,7 +279,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     let events: any[] = [];
     if (entities.events && entities.events.length > 0) {
       const eventsToInsert = entities.events.map((evt: any) => ({
-        universe_id: universeId,
+        universe_id: inputUniverseId,
         name: evt.name,
         description: evt.description,
         event_date: evt.date,
@@ -595,7 +303,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     let objects: any[] = [];
     if (entities.objects && entities.objects.length > 0) {
       const objectsToInsert = entities.objects.map((obj: any) => ({
-        universe_id: universeId,
+        universe_id: inputUniverseId,
         name: obj.name,
         type: obj.type,
         description: obj.description,
@@ -626,7 +334,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         current_step: 'Gerando páginas',
         progress: 85 
       })
-      .eq('universe_id', universeId);
+      .eq('universe_id', inputUniverseId);
 
     let pagesCreated = 0;
 
@@ -635,7 +343,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       const { data: universeData, error: fetchError } = await supabaseClient
         .from('universes')
         .select('*')
-        .eq('id', universeId)
+        .eq('id', inputUniverseId)
         .single();
 
       if (fetchError) {
@@ -650,9 +358,9 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       const { error: universePageError } = await supabaseClient
         .from('pages')
         .upsert({
-          universe_id: universeId,
+          universe_id: inputUniverseId,
           entity_type: 'UNIVERSE',
-          entity_id: universeId,
+          entity_id: inputUniverseId,
           slug: universeSlug,
           title: universe.name,
           description: universe.description,
@@ -671,7 +379,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       // 2. Create character pages
       if (characters.length > 0) {
         const characterPages = characters.map((char: any) => ({
-          universe_id: universeId,
+          universe_id: inputUniverseId,
           entity_type: 'CHARACTER',
           entity_id: char.id,
           slug: `${universeSlug}/characters/${generateSlug(char.name)}`,
@@ -697,7 +405,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       // 3. Create location pages
       if (locations.length > 0) {
         const locationPages = locations.map((loc: any) => ({
-          universe_id: universeId,
+          universe_id: inputUniverseId,
           entity_type: 'LOCATION',
           entity_id: loc.id,
           slug: `${universeSlug}/locations/${generateSlug(loc.name)}`,
@@ -723,7 +431,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       // 4. Create event pages
       if (events.length > 0) {
         const eventPages = events.map((evt: any) => ({
-          universe_id: universeId,
+          universe_id: inputUniverseId,
           entity_type: 'EVENT',
           entity_id: evt.id,
           slug: `${universeSlug}/events/${generateSlug(evt.name)}`,
@@ -749,7 +457,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       // 5. Create object pages
       if (objects.length > 0) {
         const objectPages = objects.map((obj: any) => ({
-          universe_id: universeId,
+          universe_id: inputUniverseId,
           entity_type: 'OBJECT',
           entity_id: obj.id,
           slug: `${universeSlug}/objects/${generateSlug(obj.name)}`,
@@ -789,7 +497,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         current_step: 'Analisando relacionamentos',
         progress: 90 
       })
-      .eq('universe_id', universeId);
+      .eq('universe_id', inputUniverseId);
 
     let relationshipsCreated = 0;
 
@@ -799,7 +507,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         const { data: universeData } = await supabaseClient
           .from('universes')
           .select('*')
-          .eq('id', universeId)
+          .eq('id', inputUniverseId)
           .single();
 
         if (universeData) {
@@ -842,7 +550,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
               }
 
               return {
-                universe_id: universeId,
+                universe_id: inputUniverseId,
                 from_entity_type: fromEntity.type,
                 from_entity_id: fromEntity.id,
                 to_entity_type: toEntity.type,
@@ -876,7 +584,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     await supabaseClient
       .from('universes')
       .update({ status: 'active' })
-      .eq('id', universeId);
+      .eq('id', inputUniverseId);
 
     // Complete processing job
     await supabaseClient
@@ -886,47 +594,82 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         current_step: 'Concluído',
         progress: 100 
       })
-      .eq('universe_id', universeId);
+      .eq('universe_id', inputUniverseId);
 
-    console.log('Processing completed successfully');
+    // ===== FASE 6: FINALIZAÇÃO =====
+    logger.info('Finalization', 'Completing processing job...');
+
+    const duration = Date.now() - startTime;
+
+    const result: ProcessingResult = {
+      success: true,
+      universeId: inputUniverseId,
+      stats: {
+        characters: characters.length,
+        locations: locations.length,
+        events: events.length,
+        objects: objects.length,
+        pagesCreated: pagesCreated,
+        relationshipsCreated: relationshipsCreated,
+        consolidationsPerformed: consolidationsPerformed,
+      },
+      duration,
+      warnings: logger.getLogs().filter(l => l.level === 'WARN').map(l => l.message),
+    };
+
+    logger.info('Finalization', `Processing completed successfully in ${duration}ms`);
+    logger.info('Summary', JSON.stringify(result.stats));
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Universe processed successfully',
-        stats: {
-          characters: characters.length,
-          locations: locations.length,
-          events: events.length,
-          objects: objects.length,
-          pagesCreated: pagesCreated,
-          relationshipsCreated: relationshipsCreated,
-        }
-      }),
+      JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
-    console.error('Error in process-pdf function:', error);
-    
+    const duration = Date.now() - startTime;
+
+    if (logger) {
+      logger.error('Error Handler', 'Processing failed', error);
+    }
+
     // Update processing job with error
-    if (error.universeId) {
+    if (universeId) {
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
-      
+
+      const errorMessage = error instanceof ProcessingErrorHandler
+        ? error.message
+        : error.message || 'Unknown error';
+
       await supabaseClient
         .from('processing_jobs')
-        .update({ 
+        .update({
           status: 'error',
-          error_message: error.message || 'Unknown error'
+          error_message: errorMessage,
+          current_step: 'Erro',
+          progress: 0,
         })
-        .eq('universe_id', error.universeId);
+        .eq('universe_id', universeId);
     }
 
+    const errorResponse = error instanceof ProcessingErrorHandler
+      ? error.toJSON()
+      : {
+          code: 'UNKNOWN_ERROR',
+          message: error.message || 'Unknown error',
+          phase: 'Unknown',
+          recoverable: false,
+        };
+
     return new Response(
-      JSON.stringify({ error: error.message || 'Unknown error' }),
+      JSON.stringify({
+        success: false,
+        error: errorResponse,
+        duration,
+        logs: logger?.getLogs() || [],
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
