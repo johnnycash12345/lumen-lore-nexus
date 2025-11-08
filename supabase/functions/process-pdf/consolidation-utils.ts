@@ -1,96 +1,70 @@
-/**
- * Calcula a distância de edição (Levenshtein distance) entre duas strings
- */
-function getEditDistance(s1: string, s2: string): number {
-  const costs: number[] = [];
+import { callDeepseek, extractJSON } from './deepseek-utils.ts';
+import { Logger } from './logger.ts';
+import { ConsolidationResult, Character, Location, Event, LumenObject } from './types.ts';
 
-  for (let i = 0; i <= s1.length; i++) {
-    let lastValue = i;
-    for (let j = 0; j <= s2.length; j++) {
-      if (i === 0) {
-        costs[j] = j;
-      } else if (j > 0) {
-        let newValue = costs[j - 1];
-        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-        }
-        costs[j - 1] = lastValue;
-        lastValue = newValue;
-      }
-    }
-    if (i > 0) costs[s2.length] = lastValue;
+/**
+ * Calcula similaridade entre duas strings usando Levenshtein distance
+ */
+export function levenshteinDistance(str1: string, str2: string): number {
+  const track = Array(str2.length + 1)
+    .fill(null)
+    .map(() => Array(str1.length + 1).fill(null));
+
+  for (let i = 0; i <= str1.length; i += 1) {
+    track[0][i] = i;
   }
 
-  return costs[s2.length];
-}
+  for (let j = 0; j <= str2.length; j += 1) {
+    track[j][0] = j;
+  }
 
-/**
- * Calcula a similaridade entre duas strings usando Levenshtein distance
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-
-  if (s1 === s2) return 1;
-  if (s1.length === 0 || s2.length === 0) return 0;
-
-  const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
-
-  if (longer.length === 0) return 1;
-
-  const editDistance = getEditDistance(longer, shorter);
-  return (longer.length - editDistance) / longer.length;
-}
-
-/**
- * Verifica se uma string contém outra (para detectar aliases)
- */
-function isSubstring(str1: string, str2: string): boolean {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  return s1.includes(s2) || s2.includes(s1);
-}
-
-/**
- * Encontra duplicatas em um array de entidades
- */
-function findDuplicates(
-  entities: any[],
-  nameField: string = 'name',
-  threshold: number = 0.8
-): Map<number, number[]> {
-  const duplicates = new Map<number, number[]>();
-
-  for (let i = 0; i < entities.length; i++) {
-    if (duplicates.has(i)) continue;
-
-    const group: number[] = [i];
-
-    for (let j = i + 1; j < entities.length; j++) {
-      if (duplicates.has(j)) continue;
-
-      const name1 = entities[i][nameField];
-      const name2 = entities[j][nameField];
-
-      if (name1.toLowerCase() === name2.toLowerCase()) {
-        group.push(j);
-        continue;
-      }
-
-      if (isSubstring(name1, name2)) {
-        group.push(j);
-        continue;
-      }
-
-      const similarity = calculateSimilarity(name1, name2);
-      if (similarity >= threshold) {
-        group.push(j);
-      }
+  for (let j = 1; j <= str2.length; j += 1) {
+    for (let i = 1; i <= str1.length; i += 1) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(
+        track[j][i - 1] + 1,
+        track[j - 1][i] + 1,
+        track[j - 1][i - 1] + indicator
+      );
     }
+  }
 
-    if (group.length > 1) {
-      duplicates.set(i, group);
+  return track[str2.length][str1.length];
+}
+
+/**
+ * Calcula similaridade entre 0 e 1
+ */
+export function calculateSimilarity(str1: string, str2: string): number {
+  const maxLength = Math.max(str1.length, str2.length);
+  if (maxLength === 0) return 1;
+
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  return 1 - distance / maxLength;
+}
+
+/**
+ * Encontra potenciais duplicatas em personagens
+ */
+export function findDuplicateCharacters(
+  characters: Character[],
+  threshold: number = 0.7
+): Array<{ indices: number[]; similarity: number }> {
+  const duplicates: Array<{ indices: number[]; similarity: number }> = [];
+
+  for (let i = 0; i < characters.length; i++) {
+    for (let j = i + 1; j < characters.length; j++) {
+      const similarity = calculateSimilarity(
+        characters[i].name,
+        characters[j].name
+      );
+
+      if (similarity >= threshold) {
+        duplicates.push({
+          indices: [i, j],
+          similarity,
+        });
+      }
     }
   }
 
@@ -98,207 +72,583 @@ function findDuplicates(
 }
 
 /**
- * Mescla múltiplos personagens em um
+ * Encontra potenciais duplicatas em locais
  */
-function mergeCharacters(characters: any[]): any {
-  if (characters.length === 0) return null;
-  if (characters.length === 1) return characters[0];
+export function findDuplicateLocations(
+  locations: Location[],
+  threshold: number = 0.7
+): Array<{ indices: number[]; similarity: number }> {
+  const duplicates: Array<{ indices: number[]; similarity: number }> = [];
 
-  const base = characters.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
+  for (let i = 0; i < locations.length; i++) {
+    for (let j = i + 1; j < locations.length; j++) {
+      const similarity = calculateSimilarity(
+        locations[i].name,
+        locations[j].name
+      );
 
-  const allAliases = new Set<string>();
-  characters.forEach(char => {
-    if (char.name) allAliases.add(char.name);
-    if (char.aliases && Array.isArray(char.aliases)) {
-      char.aliases.forEach((alias: string) => allAliases.add(alias));
+      if (similarity >= threshold) {
+        duplicates.push({
+          indices: [i, j],
+          similarity,
+        });
+      }
     }
-  });
-  allAliases.delete(base.name);
-
-  const allAbilities = new Set<string>();
-  characters.forEach(char => {
-    if (char.abilities && Array.isArray(char.abilities)) {
-      char.abilities.forEach((ability: string) => allAbilities.add(ability));
-    }
-  });
-
-  const roleHierarchy: Record<string, number> = { 
-    'Protagonista': 3, 
-    'Antagonista': 2, 
-    'Secundário': 1, 
-    'Menor': 0 
-  };
-  
-  const bestRole = characters.reduce((prev, curr) => {
-    const prevScore = roleHierarchy[prev.role] || 0;
-    const currScore = roleHierarchy[curr.role] || 0;
-    return currScore > prevScore ? curr : prev;
-  }).role;
-
-  return {
-    ...base,
-    name: base.name,
-    aliases: Array.from(allAliases),
-    role: bestRole,
-    abilities: Array.from(allAbilities),
-    personality: base.personality || characters.find(c => c.personality)?.personality,
-    occupation: base.occupation || characters.find(c => c.occupation)?.occupation,
-  };
-}
-
-/**
- * Consolida personagens duplicados
- */
-export function consolidateCharacters(characters: any[]): any[] {
-  if (!characters || characters.length === 0) return [];
-
-  const duplicates = findDuplicates(characters, 'name', 0.8);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < characters.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeCharacters(group.map(idx => characters[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
   }
 
-  return consolidated;
+  return duplicates;
 }
 
 /**
- * Mescla múltiplos locais em um
+ * Encontra potenciais duplicatas em eventos
  */
-function mergeLocations(locations: any[]): any {
-  if (locations.length === 0) return null;
-  if (locations.length === 1) return locations[0];
+export function findDuplicateEvents(
+  events: Event[],
+  threshold: number = 0.7
+): Array<{ indices: number[]; similarity: number }> {
+  const duplicates: Array<{ indices: number[]; similarity: number }> = [];
 
-  const base = locations.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
+  for (let i = 0; i < events.length; i++) {
+    for (let j = i + 1; j < events.length; j++) {
+      const similarity = calculateSimilarity(
+        events[i].name,
+        events[j].name
+      );
+
+      if (similarity >= threshold) {
+        duplicates.push({
+          indices: [i, j],
+          similarity,
+        });
+      }
+    }
+  }
+
+  return duplicates;
+}
+
+/**
+ * Encontra potenciais duplicatas em objetos
+ */
+export function findDuplicateObjects(
+  objects: LumenObject[],
+  threshold: number = 0.7
+): Array<{ indices: number[]; similarity: number }> {
+  const duplicates: Array<{ indices: number[]; similarity: number }> = [];
+
+  for (let i = 0; i < objects.length; i++) {
+    for (let j = i + 1; j < objects.length; j++) {
+      const similarity = calculateSimilarity(
+        objects[i].name,
+        objects[j].name
+      );
+
+      if (similarity >= threshold) {
+        duplicates.push({
+          indices: [i, j],
+          similarity,
+        });
+      }
+    }
+  }
+
+  return duplicates;
+}
+
+/**
+ * Consolida personagens duplicados usando Deepseek
+ */
+export async function consolidateCharacters(
+  characters: Character[],
+  logger?: Logger
+): Promise<ConsolidationResult> {
+  logger?.info('Character Consolidation', `Checking ${characters.length} characters for duplicates...`);
+
+  const duplicates = findDuplicateCharacters(characters, 0.7);
+
+  if (duplicates.length === 0) {
+    logger?.info('Character Consolidation', 'No duplicates found');
+    return {
+      consolidated: characters,
+      merges: [],
+      statistics: {
+        originalCount: characters.length,
+        consolidatedCount: characters.length,
+        duplicatesRemoved: 0,
+      },
+    };
+  }
+
+  logger?.info('Character Consolidation', `Found ${duplicates.length} potential duplicates`);
+
+  const merges: Array<{
+    originalNames: string[];
+    mergedInto: string;
+    confidence: number;
+  }> = [];
+
+  let consolidated = [...characters];
+  const indicesToRemove = new Set<number>();
+
+  for (const duplicate of duplicates) {
+    const [idx1, idx2] = duplicate.indices;
+
+    if (indicesToRemove.has(idx1) || indicesToRemove.has(idx2)) {
+      continue;
+    }
+
+    const char1 = consolidated[idx1];
+    const char2 = consolidated[idx2];
+
+    const prompt = `
+São estes dois personagens a mesma pessoa?
+
+Personagem 1:
+Nome: ${char1.name}
+Aliases: ${char1.aliases?.join(', ') || 'Nenhum'}
+Descrição: ${char1.description}
+Papel: ${char1.role}
+
+Personagem 2:
+Nome: ${char2.name}
+Aliases: ${char2.aliases?.join(', ') || 'Nenhum'}
+Descrição: ${char2.description}
+Papel: ${char2.role}
+
+Responda com JSON:
+{
+  "isSamePerson": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explicação breve"
+}
+`;
+
+    try {
+      const response = await callDeepseek(
+        prompt,
+        'Você é um especialista em análise de personagens literários.',
+        { temperature: 0.1, maxTokens: 500 },
+        logger,
+        'Character Consolidation'
+      );
+
+      const result = extractJSON(response, logger, 'Character Consolidation');
+
+      if (result.isSamePerson && result.confidence > 0.7) {
+        const mergedCharacter: Character = {
+          name: char1.name,
+          aliases: [
+            ...new Set([
+              ...(char1.aliases || []),
+              ...(char2.aliases || []),
+              char2.name,
+            ]),
+          ],
+          description: `${char1.description} ${char2.description}`.trim(),
+          role: char1.role,
+          abilities: [...new Set([...(char1.abilities || []), ...(char2.abilities || [])])],
+          personality: `${char1.personality || ''} ${char2.personality || ''}`.trim(),
+          occupation: char1.occupation || char2.occupation,
+        };
+
+        consolidated[idx1] = mergedCharacter;
+        indicesToRemove.add(idx2);
+
+        merges.push({
+          originalNames: [char1.name, char2.name],
+          mergedInto: mergedCharacter.name,
+          confidence: result.confidence,
+        });
+
+        logger?.info('Character Consolidation', `Merged "${char1.name}" and "${char2.name}"`);
+      }
+    } catch (error: any) {
+      logger?.warn('Character Consolidation', `Failed to consolidate "${char1.name}" and "${char2.name}": ${error.message}`);
+    }
+  }
+
+  consolidated = consolidated.filter((_, idx) => !indicesToRemove.has(idx));
+
+  logger?.info('Character Consolidation', `Consolidated ${characters.length} → ${consolidated.length} characters`);
 
   return {
-    ...base,
-    type: base.type || locations.find(l => l.type)?.type,
-    country: base.country || locations.find(l => l.country)?.country,
-    significance: base.significance || locations.find(l => l.significance)?.significance,
+    consolidated,
+    merges,
+    statistics: {
+      originalCount: characters.length,
+      consolidatedCount: consolidated.length,
+      duplicatesRemoved: indicesToRemove.size,
+    },
   };
 }
 
 /**
  * Consolida locais duplicados
  */
-export function consolidateLocations(locations: any[]): any[] {
-  if (!locations || locations.length === 0) return [];
+export async function consolidateLocations(
+  locations: Location[],
+  logger?: Logger
+): Promise<ConsolidationResult> {
+  logger?.info('Location Consolidation', `Checking ${locations.length} locations for duplicates...`);
 
-  const duplicates = findDuplicates(locations, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
+  const duplicates = findDuplicateLocations(locations, 0.7);
 
-  for (let i = 0; i < locations.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeLocations(group.map(idx => locations[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
+  if (duplicates.length === 0) {
+    logger?.info('Location Consolidation', 'No duplicates found');
+    return {
+      consolidated: locations,
+      merges: [],
+      statistics: {
+        originalCount: locations.length,
+        consolidatedCount: locations.length,
+        duplicatesRemoved: 0,
+      },
+    };
   }
 
-  return consolidated;
-}
+  logger?.info('Location Consolidation', `Found ${duplicates.length} potential duplicates`);
 
-/**
- * Mescla múltiplos eventos em um
- */
-function mergeEvents(events: any[]): any {
-  if (events.length === 0) return null;
-  if (events.length === 1) return events[0];
+  const merges: Array<{
+    originalNames: string[];
+    mergedInto: string;
+    confidence: number;
+  }> = [];
 
-  const base = events.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
+  let consolidated = [...locations];
+  const indicesToRemove = new Set<number>();
 
-  const involvedCharacters = new Set<string>();
-  events.forEach(evt => {
-    if (evt.involvedCharacters && Array.isArray(evt.involvedCharacters)) {
-      evt.involvedCharacters.forEach((char: string) => involvedCharacters.add(char));
+  for (const duplicate of duplicates) {
+    const [idx1, idx2] = duplicate.indices;
+
+    if (indicesToRemove.has(idx1) || indicesToRemove.has(idx2)) {
+      continue;
     }
-  });
+
+    const loc1 = consolidated[idx1];
+    const loc2 = consolidated[idx2];
+
+    const prompt = `
+São estes dois locais o mesmo lugar?
+
+Local 1:
+Nome: ${loc1.name}
+Tipo: ${loc1.type}
+Descrição: ${loc1.description}
+País: ${loc1.country || 'Não especificado'}
+
+Local 2:
+Nome: ${loc2.name}
+Tipo: ${loc2.type}
+Descrição: ${loc2.description}
+País: ${loc2.country || 'Não especificado'}
+
+Responda com JSON:
+{
+  "isSameLocation": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explicação breve"
+}
+`;
+
+    try {
+      const response = await callDeepseek(
+        prompt,
+        'Você é um especialista em análise de locais em narrativas literárias.',
+        { temperature: 0.1, maxTokens: 500 },
+        logger,
+        'Location Consolidation'
+      );
+
+      const result = extractJSON(response, logger, 'Location Consolidation');
+
+      if (result.isSameLocation && result.confidence > 0.7) {
+        const mergedLocation: Location = {
+          name: loc1.name,
+          aliases: [
+            ...new Set([
+              ...(loc1.aliases || []),
+              ...(loc2.aliases || []),
+              loc2.name,
+            ]),
+          ],
+          type: loc1.type || loc2.type,
+          description: `${loc1.description} ${loc2.description}`.trim(),
+          country: loc1.country || loc2.country,
+          significance: `${loc1.significance} ${loc2.significance}`.trim(),
+        };
+
+        consolidated[idx1] = mergedLocation;
+        indicesToRemove.add(idx2);
+
+        merges.push({
+          originalNames: [loc1.name, loc2.name],
+          mergedInto: mergedLocation.name,
+          confidence: result.confidence,
+        });
+
+        logger?.info('Location Consolidation', `Merged "${loc1.name}" and "${loc2.name}"`);
+      }
+    } catch (error: any) {
+      logger?.warn('Location Consolidation', `Failed to consolidate "${loc1.name}" and "${loc2.name}": ${error.message}`);
+    }
+  }
+
+  consolidated = consolidated.filter((_, idx) => !indicesToRemove.has(idx));
+
+  logger?.info('Location Consolidation', `Consolidated ${locations.length} → ${consolidated.length} locations`);
 
   return {
-    ...base,
-    date: base.date || events.find(e => e.date)?.date,
-    significance: base.significance || events.find(e => e.significance)?.significance,
-    involvedCharacters: Array.from(involvedCharacters),
+    consolidated,
+    merges,
+    statistics: {
+      originalCount: locations.length,
+      consolidatedCount: consolidated.length,
+      duplicatesRemoved: indicesToRemove.size,
+    },
   };
 }
 
 /**
  * Consolida eventos duplicados
  */
-export function consolidateEvents(events: any[]): any[] {
-  if (!events || events.length === 0) return [];
+export async function consolidateEvents(
+  events: Event[],
+  logger?: Logger
+): Promise<ConsolidationResult> {
+  logger?.info('Event Consolidation', `Checking ${events.length} events for duplicates...`);
 
-  const duplicates = findDuplicates(events, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
+  const duplicates = findDuplicateEvents(events, 0.7);
 
-  for (let i = 0; i < events.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeEvents(group.map(idx => events[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
+  if (duplicates.length === 0) {
+    logger?.info('Event Consolidation', 'No duplicates found');
+    return {
+      consolidated: events,
+      merges: [],
+      statistics: {
+        originalCount: events.length,
+        consolidatedCount: events.length,
+        duplicatesRemoved: 0,
+      },
+    };
   }
 
-  return consolidated;
+  logger?.info('Event Consolidation', `Found ${duplicates.length} potential duplicates`);
+
+  const merges: Array<{
+    originalNames: string[];
+    mergedInto: string;
+    confidence: number;
+  }> = [];
+
+  let consolidated = [...events];
+  const indicesToRemove = new Set<number>();
+
+  for (const duplicate of duplicates) {
+    const [idx1, idx2] = duplicate.indices;
+
+    if (indicesToRemove.has(idx1) || indicesToRemove.has(idx2)) {
+      continue;
+    }
+
+    const evt1 = consolidated[idx1];
+    const evt2 = consolidated[idx2];
+
+    const prompt = `
+São estes dois eventos o mesmo evento?
+
+Evento 1:
+Nome: ${evt1.name}
+Descrição: ${evt1.description}
+Data: ${evt1.date}
+Personagens: ${evt1.involvedCharacters?.join(', ') || 'Nenhum'}
+
+Evento 2:
+Nome: ${evt2.name}
+Descrição: ${evt2.description}
+Data: ${evt2.date}
+Personagens: ${evt2.involvedCharacters?.join(', ') || 'Nenhum'}
+
+Responda com JSON:
+{
+  "isSameEvent": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explicação breve"
 }
+`;
 
-/**
- * Mescla múltiplos objetos em um
- */
-function mergeObjects(objects: any[]): any {
-  if (objects.length === 0) return null;
-  if (objects.length === 1) return objects[0];
+    try {
+      const response = await callDeepseek(
+        prompt,
+        'Você é um especialista em análise de eventos em narrativas literárias.',
+        { temperature: 0.1, maxTokens: 500 },
+        logger,
+        'Event Consolidation'
+      );
 
-  const base = objects.reduce((prev, curr) =>
-    (curr.description?.length || 0) > (prev.description?.length || 0) ? curr : prev
-  );
+      const result = extractJSON(response, logger, 'Event Consolidation');
+
+      if (result.isSameEvent && result.confidence > 0.7) {
+        const mergedEvent: Event = {
+          name: evt1.name,
+          description: `${evt1.description} ${evt2.description}`.trim(),
+          date: evt1.date || evt2.date,
+          significance: evt1.significance,
+          involvedCharacters: [...new Set([...(evt1.involvedCharacters || []), ...(evt2.involvedCharacters || [])])],
+        };
+
+        consolidated[idx1] = mergedEvent;
+        indicesToRemove.add(idx2);
+
+        merges.push({
+          originalNames: [evt1.name, evt2.name],
+          mergedInto: mergedEvent.name,
+          confidence: result.confidence,
+        });
+
+        logger?.info('Event Consolidation', `Merged "${evt1.name}" and "${evt2.name}"`);
+      }
+    } catch (error: any) {
+      logger?.warn('Event Consolidation', `Failed to consolidate "${evt1.name}" and "${evt2.name}": ${error.message}`);
+    }
+  }
+
+  consolidated = consolidated.filter((_, idx) => !indicesToRemove.has(idx));
+
+  logger?.info('Event Consolidation', `Consolidated ${events.length} → ${consolidated.length} events`);
 
   return {
-    ...base,
-    type: base.type || objects.find(o => o.type)?.type,
-    powers: base.powers || objects.find(o => o.powers)?.powers,
+    consolidated,
+    merges,
+    statistics: {
+      originalCount: events.length,
+      consolidatedCount: consolidated.length,
+      duplicatesRemoved: indicesToRemove.size,
+    },
   };
 }
 
 /**
  * Consolida objetos duplicados
  */
-export function consolidateObjects(objects: any[]): any[] {
-  if (!objects || objects.length === 0) return [];
+export async function consolidateObjects(
+  objects: LumenObject[],
+  logger?: Logger
+): Promise<ConsolidationResult> {
+  logger?.info('Object Consolidation', `Checking ${objects.length} objects for duplicates...`);
 
-  const duplicates = findDuplicates(objects, 'name', 0.85);
-  const consolidated: any[] = [];
-  const processedIndices = new Set<number>();
+  const duplicates = findDuplicateObjects(objects, 0.7);
 
-  for (let i = 0; i < objects.length; i++) {
-    if (processedIndices.has(i)) continue;
-
-    const group = duplicates.get(i) || [i];
-    const merged = mergeObjects(group.map(idx => objects[idx]));
-
-    if (merged) consolidated.push(merged);
-    group.forEach(idx => processedIndices.add(idx));
+  if (duplicates.length === 0) {
+    logger?.info('Object Consolidation', 'No duplicates found');
+    return {
+      consolidated: objects,
+      merges: [],
+      statistics: {
+        originalCount: objects.length,
+        consolidatedCount: objects.length,
+        duplicatesRemoved: 0,
+      },
+    };
   }
 
-  return consolidated;
+  logger?.info('Object Consolidation', `Found ${duplicates.length} potential duplicates`);
+
+  const merges: Array<{
+    originalNames: string[];
+    mergedInto: string;
+    confidence: number;
+  }> = [];
+
+  let consolidated = [...objects];
+  const indicesToRemove = new Set<number>();
+
+  for (const duplicate of duplicates) {
+    const [idx1, idx2] = duplicate.indices;
+
+    if (indicesToRemove.has(idx1) || indicesToRemove.has(idx2)) {
+      continue;
+    }
+
+    const obj1 = consolidated[idx1];
+    const obj2 = consolidated[idx2];
+
+    const prompt = `
+São estes dois objetos o mesmo objeto?
+
+Objeto 1:
+Nome: ${obj1.name}
+Tipo: ${obj1.type}
+Descrição: ${obj1.description}
+Poderes: ${obj1.powers?.join(', ') || 'Nenhum'}
+
+Objeto 2:
+Nome: ${obj2.name}
+Tipo: ${obj2.type}
+Descrição: ${obj2.description}
+Poderes: ${obj2.powers?.join(', ') || 'Nenhum'}
+
+Responda com JSON:
+{
+  "isSameObject": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explicação breve"
+}
+`;
+
+    try {
+      const response = await callDeepseek(
+        prompt,
+        'Você é um especialista em análise de objetos em narrativas literárias.',
+        { temperature: 0.1, maxTokens: 500 },
+        logger,
+        'Object Consolidation'
+      );
+
+      const result = extractJSON(response, logger, 'Object Consolidation');
+
+      if (result.isSameObject && result.confidence > 0.7) {
+        const mergedObject: LumenObject = {
+          name: obj1.name,
+          aliases: [
+            ...new Set([
+              ...(obj1.aliases || []),
+              ...(obj2.aliases || []),
+              obj2.name,
+            ]),
+          ],
+          type: obj1.type || obj2.type,
+          description: `${obj1.description} ${obj2.description}`.trim(),
+          owner: obj1.owner || obj2.owner,
+          powers: [...new Set([...(obj1.powers || []), ...(obj2.powers || [])])],
+        };
+
+        consolidated[idx1] = mergedObject;
+        indicesToRemove.add(idx2);
+
+        merges.push({
+          originalNames: [obj1.name, obj2.name],
+          mergedInto: mergedObject.name,
+          confidence: result.confidence,
+        });
+
+        logger?.info('Object Consolidation', `Merged "${obj1.name}" and "${obj2.name}"`);
+      }
+    } catch (error: any) {
+      logger?.warn('Object Consolidation', `Failed to consolidate "${obj1.name}" and "${obj2.name}": ${error.message}`);
+    }
+  }
+
+  consolidated = consolidated.filter((_, idx) => !indicesToRemove.has(idx));
+
+  logger?.info('Object Consolidation', `Consolidated ${objects.length} → ${consolidated.length} objects`);
+
+  return {
+    consolidated,
+    merges,
+    statistics: {
+      originalCount: objects.length,
+      consolidatedCount: consolidated.length,
+      duplicatesRemoved: indicesToRemove.size,
+    },
+  };
 }

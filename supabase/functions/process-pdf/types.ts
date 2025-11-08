@@ -68,7 +68,7 @@ export interface LumenObject {
   type: string;
   description: string;
   owner?: string;
-  powers: string;
+  powers: string[];
 }
 
 export interface ProcessingResult {

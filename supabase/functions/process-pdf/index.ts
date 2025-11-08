@@ -179,42 +179,40 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     logger.info('Consolidation', 'Consolidating duplicate entities...');
     await updateProgress(supabaseClient, inputUniverseId, 'Consolidando entidades duplicadas', 50, logger);
 
-    let consolidationsPerformed = 0;
+    const consolidationStats = {
+      characters: 0,
+      locations: 0,
+      events: 0,
+      objects: 0,
+    };
 
     try {
       if (entities.characters && entities.characters.length > 0) {
-        const originalCount = entities.characters.length;
-        entities.characters = consolidateCharacters(entities.characters);
-        const removedCount = originalCount - entities.characters.length;
-        consolidationsPerformed += removedCount;
-        logger.info('Consolidation', `Characters: ${originalCount} → ${entities.characters.length} (removed ${removedCount} duplicates)`);
+        const charResult = await consolidateCharacters(entities.characters, logger);
+        entities.characters = charResult.consolidated as any[];
+        consolidationStats.characters = charResult.statistics.duplicatesRemoved;
       }
 
       if (entities.locations && entities.locations.length > 0) {
-        const originalCount = entities.locations.length;
-        entities.locations = consolidateLocations(entities.locations);
-        const removedCount = originalCount - entities.locations.length;
-        consolidationsPerformed += removedCount;
-        logger.info('Consolidation', `Locations: ${originalCount} → ${entities.locations.length} (removed ${removedCount} duplicates)`);
+        const locResult = await consolidateLocations(entities.locations, logger);
+        entities.locations = locResult.consolidated as any[];
+        consolidationStats.locations = locResult.statistics.duplicatesRemoved;
       }
 
       if (entities.events && entities.events.length > 0) {
-        const originalCount = entities.events.length;
-        entities.events = consolidateEvents(entities.events);
-        const removedCount = originalCount - entities.events.length;
-        consolidationsPerformed += removedCount;
-        logger.info('Consolidation', `Events: ${originalCount} → ${entities.events.length} (removed ${removedCount} duplicates)`);
+        const evtResult = await consolidateEvents(entities.events, logger);
+        entities.events = evtResult.consolidated as any[];
+        consolidationStats.events = evtResult.statistics.duplicatesRemoved;
       }
 
       if (entities.objects && entities.objects.length > 0) {
-        const originalCount = entities.objects.length;
-        entities.objects = consolidateObjects(entities.objects);
-        const removedCount = originalCount - entities.objects.length;
-        consolidationsPerformed += removedCount;
-        logger.info('Consolidation', `Objects: ${originalCount} → ${entities.objects.length} (removed ${removedCount} duplicates)`);
+        const objResult = await consolidateObjects(entities.objects, logger);
+        entities.objects = objResult.consolidated as any[];
+        consolidationStats.objects = objResult.statistics.duplicatesRemoved;
       }
 
-      logger.info('Consolidation', `Total consolidations: ${consolidationsPerformed}`);
+      const totalConsolidations = consolidationStats.characters + consolidationStats.locations + consolidationStats.events + consolidationStats.objects;
+      logger.info('Consolidation', `Consolidation complete. Total duplicates removed: ${totalConsolidations}`, consolidationStats);
     } catch (error: any) {
       logger.error('Consolidation', 'Error consolidating entities', error);
     }
@@ -611,7 +609,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         objects: objects.length,
         pagesCreated: pagesCreated,
         relationshipsCreated: relationshipsCreated,
-        consolidationsPerformed: consolidationsPerformed,
+        consolidationsPerformed: consolidationStats.characters + consolidationStats.locations + consolidationStats.events + consolidationStats.objects,
       },
       duration,
       warnings: logger.getLogs().filter(l => l.level === 'WARN').map(l => l.message),
