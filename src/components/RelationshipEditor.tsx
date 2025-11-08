@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Edit } from "lucide-react";
 // @ts-ignore - react-force-graph doesn't have types
-import ForceGraph2D from "react-force-graph-2d";
+import ForceGraph2D from "react-force-graph";
 import type { Tables } from "@/integrations/supabase/types";
 import { z } from "zod";
 
