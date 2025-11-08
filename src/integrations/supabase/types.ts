@@ -360,6 +360,38 @@ export type Database = {
         }
         Relationships: []
       }
+      relationship_networks: {
+        Row: {
+          created_at: string
+          id: string
+          network_data: Json
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          network_data: Json
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          network_data?: Json
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relationship_networks_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       relationships: {
         Row: {
           created_at: string

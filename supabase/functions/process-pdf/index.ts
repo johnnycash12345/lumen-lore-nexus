@@ -16,7 +16,15 @@ import {
   analyzeEventEmotionalImpact,
   consolidateEmotionalAnalysis,
 } from './emotional-extraction-strategy.ts';
-import type { SceneEmotionalAnalysis, CharacterEmotionalJourney, RelationshipEmotionalDynamics, EventEmotionalImpact } from './emotional-types.ts';
+import type { SceneEmotionalAnalysis, CharacterEmotionalJourney, RelationshipEmotionalDynamics as EmotionalRelDynamics, EventEmotionalImpact } from './emotional-types.ts';
+import {
+  identifyAllRelationships,
+  analyzeRelationshipDynamics,
+  identifyRelationshipClusters,
+  identifyAlliancesAndRivalries,
+  consolidateRelationshipNetwork,
+} from './relationship-extraction-strategy.ts';
+import type { RelationshipDynamics } from './relationship-types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -375,7 +383,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       }
 
       // Analisar relacionamentos principais (limitar a 3 pares)
-      const relationships: RelationshipEmotionalDynamics[] = [];
+      const relationships: EmotionalRelDynamics[] = [];
       let relationshipCount = 0;
       const maxRelationships = 3;
       
@@ -437,6 +445,77 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
     }
 
     await updateProgress(supabaseClient, inputUniverseId, 'Análise emocional concluída', 70, logger);
+
+    // ===== FASE 5: ANÁLISE DE RELACIONAMENTOS =====
+    logger.info('Relationship Analysis', 'Starting relationship analysis...');
+    await updateProgress(supabaseClient, inputUniverseId, 'Analisando relacionamentos', 75, logger);
+
+    try {
+      // Identificar todos os relacionamentos (limitar a análise para performance)
+      const identifiedRelationships = await identifyAllRelationships(
+        pdfText,
+        entities.characters.map((c: any) => c.name).slice(0, 10), // Limitar a 10 personagens
+        logger
+      );
+
+      logger.info('Relationship Analysis', `Identified ${identifiedRelationships.length} relationships`);
+
+      // Analisar dinâmica de cada relacionamento (limitar a 5)
+      const relationshipDynamics: RelationshipDynamics[] = [];
+      const maxRelationshipsToAnalyze = Math.min(identifiedRelationships.length, 5);
+      
+      for (let i = 0; i < maxRelationshipsToAnalyze; i++) {
+        const rel = identifiedRelationships[i];
+        const dynamics = await analyzeRelationshipDynamics(
+          rel.character1,
+          rel.character2,
+          rel.type,
+          pdfText,
+          logger
+        );
+        relationshipDynamics.push(dynamics);
+
+        if ((i + 1) % 2 === 0) {
+          logger.info('Relationship Analysis', `Analyzed ${i + 1}/${maxRelationshipsToAnalyze} relationships`);
+        }
+      }
+
+      // Identificar clusters
+      const clusters = await identifyRelationshipClusters(relationshipDynamics, logger);
+
+      // Identificar alianças e rivalidades
+      const { alliances, rivalries } = await identifyAlliancesAndRivalries(relationshipDynamics, logger);
+
+      // Consolidar rede
+      const relationshipNetwork = await consolidateRelationshipNetwork(
+        inputUniverseId,
+        relationshipDynamics,
+        clusters,
+        alliances,
+        rivalries,
+        logger
+      );
+
+      // Salvar no banco de dados
+      const { error: networkError } = await supabaseClient
+        .from('relationship_networks')
+        .insert({
+          universe_id: inputUniverseId,
+          network_data: relationshipNetwork,
+        });
+
+      if (networkError) {
+        logger.error('Relationship Analysis', 'Failed to save relationship network', networkError);
+      } else {
+        logger.info('Relationship Analysis', 'Relationship analysis completed and saved');
+      }
+
+    } catch (error: any) {
+      logger.error('Relationship Analysis', 'Failed to complete relationship analysis', error);
+      // Continue processing
+    }
+
+    await updateProgress(supabaseClient, inputUniverseId, 'Análise de relacionamentos concluída', 80, logger);
 
     // ===== FASE 8: GERAR PÁGINAS =====
     
