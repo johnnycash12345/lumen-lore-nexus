@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { analyzeRelationships } from '../shared/deepseek-utils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -778,6 +779,99 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
       // Don't throw - continue processing even if page generation fails
     }
 
+    // ===== FASE 9: ANALISAR RELACIONAMENTOS =====
+    
+    console.log('Analyzing relationships between entities...');
+
+    await supabaseClient
+      .from('processing_jobs')
+      .update({ 
+        current_step: 'Analisando relacionamentos',
+        progress: 90 
+      })
+      .eq('universe_id', universeId);
+
+    let relationshipsCreated = 0;
+
+    try {
+      // Only analyze if we have entities
+      if (characters.length > 0 || locations.length > 0 || events.length > 0) {
+        const { data: universeData } = await supabaseClient
+          .from('universes')
+          .select('*')
+          .eq('id', universeId)
+          .single();
+
+        if (universeData) {
+          console.log('Calling Deepseek for relationship analysis...');
+          
+          const relationships = await analyzeRelationships(
+            characters.slice(0, 20), // Limit to top 20 to avoid token limits
+            locations.slice(0, 10),
+            events.slice(0, 10),
+            universeData.description || ''
+          );
+
+          console.log(`Deepseek identified ${relationships.length} relationships`);
+
+          // Map entity names to IDs
+          const entityMap = new Map<string, { type: string; id: string }>();
+          
+          characters.forEach((char: any) => {
+            entityMap.set(char.name.toLowerCase(), { type: 'CHARACTER', id: char.id });
+          });
+          locations.forEach((loc: any) => {
+            entityMap.set(loc.name.toLowerCase(), { type: 'LOCATION', id: loc.id });
+          });
+          events.forEach((evt: any) => {
+            entityMap.set(evt.name.toLowerCase(), { type: 'EVENT', id: evt.id });
+          });
+          objects.forEach((obj: any) => {
+            entityMap.set(obj.name.toLowerCase(), { type: 'OBJECT', id: obj.id });
+          });
+
+          // Process and insert relationships
+          const relationshipsToInsert = relationships
+            .map((rel: any) => {
+              const fromEntity = entityMap.get(rel.from_entity_name?.toLowerCase() || '');
+              const toEntity = entityMap.get(rel.to_entity_name?.toLowerCase() || '');
+
+              if (!fromEntity || !toEntity) {
+                console.warn(`Could not find entities for relationship: ${rel.from_entity_name} -> ${rel.to_entity_name}`);
+                return null;
+              }
+
+              return {
+                universe_id: universeId,
+                from_entity_type: fromEntity.type,
+                from_entity_id: fromEntity.id,
+                to_entity_type: toEntity.type,
+                to_entity_id: toEntity.id,
+                relationship_type: rel.relationship_type || 'RELATED',
+                description: rel.description || '',
+              };
+            })
+            .filter((rel: any) => rel !== null);
+
+          if (relationshipsToInsert.length > 0) {
+            const { error: relError } = await supabaseClient
+              .from('relationships')
+              .insert(relationshipsToInsert);
+
+            if (relError) {
+              console.error('Error inserting relationships:', relError);
+            } else {
+              relationshipsCreated = relationshipsToInsert.length;
+              console.log(`Created ${relationshipsCreated} relationships`);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error analyzing relationships:', error);
+      // Don't throw - continue even if relationship analysis fails
+    }
+
     // Update universe status to active
     await supabaseClient
       .from('universes')
@@ -806,6 +900,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
           events: events.length,
           objects: objects.length,
           pagesCreated: pagesCreated,
+          relationshipsCreated: relationshipsCreated,
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
