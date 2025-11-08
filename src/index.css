@@ -171,4 +171,51 @@ All colors MUST be HSL.
     height: 1px;
     background: linear-gradient(90deg, transparent, hsl(var(--lumen-glow)), transparent);
   }
+
+  /* Pontos decorativos dourados */
+  .decorative-dots {
+    position: relative;
+  }
+
+  .decorative-dots::before,
+  .decorative-dots::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: hsl(var(--lumen-glow));
+  }
+
+  .decorative-dots::before {
+    top: 20%;
+    left: 10%;
+  }
+
+  .decorative-dots::after {
+    bottom: 30%;
+    right: 15%;
+  }
+
+  /* Navbar horizontal */
+  .nav-link {
+    position: relative;
+    padding-bottom: 4px;
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: hsl(var(--lumen-glow));
+    transition: width 0.3s ease;
+  }
+
+  .nav-link:hover::after,
+  .nav-link.active::after {
+    width: 100%;
+  }
 }
