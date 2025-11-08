@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
-import { Book, Users, MapPin, Calendar, FileText, CheckCircle2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Book, Users, MapPin, Calendar, FileText, CheckCircle2, TrendingUp, Activity, Upload, Settings, User } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Stats {
   totalUniverses: number;
@@ -109,27 +111,156 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-serif text-navy mb-8">Dashboard</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-serif text-navy mb-2">Dashboard</h1>
+          <p className="text-gray-600">Visão geral do sistema</p>
+        </div>
+        <Link to="/admin/upload">
+          <Button className="bg-navy hover:bg-navy/90">
+            <FileText className="w-4 h-4 mr-2" />
+            Upload PDF
+          </Button>
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <Card key={card.title} className="p-6 hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">{card.title}</p>
-                  <p className="text-3xl font-bold text-navy">{card.value}</p>
+            <Card key={card.title} className="hover:shadow-lg transition-all hover:scale-105">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">{card.title}</p>
+                    <p className="text-3xl font-bold text-navy">{card.value}</p>
+                  </div>
+                  <div className={`${card.bgColor} ${card.color} p-4 rounded-full`}>
+                    <Icon className="w-6 h-6" />
+                  </div>
                 </div>
-                <div className={`${card.bgColor} ${card.color} p-4 rounded-full`}>
-                  <Icon className="w-6 h-6" />
-                </div>
-              </div>
+              </CardContent>
             </Card>
           );
         })}
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Atividade Recente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 pb-3 border-b">
+                <div className="w-2 h-2 rounded-full bg-green-500 mt-2"></div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">Novo universo criado</p>
+                  <p className="text-xs text-gray-500">Harry Potter - 1234 entidades extraídas</p>
+                  <p className="text-xs text-gray-400 mt-1">Há 2 horas</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 pb-3 border-b">
+                <div className="w-2 h-2 rounded-full bg-blue-500 mt-2"></div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">PDF processado</p>
+                  <p className="text-xs text-gray-500">O Senhor dos Anéis - Processamento completo</p>
+                  <p className="text-xs text-gray-400 mt-1">Há 5 horas</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-purple-500 mt-2"></div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">Backup realizado</p>
+                  <p className="text-xs text-gray-500">Backup automático concluído com sucesso</p>
+                  <p className="text-xs text-gray-400 mt-1">Há 1 dia</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span>Taxa de Sucesso</span>
+                  <span className="font-semibold">{stats.successRate}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-green-500 h-2 rounded-full" 
+                    style={{ width: `${stats.successRate}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span>Processamento em Andamento</span>
+                  <span className="font-semibold">0</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-500 h-2 rounded-full" style={{ width: '0%' }}></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span>Uso de Armazenamento</span>
+                  <span className="font-semibold">1.77 GB / 10 GB</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-purple-500 h-2 rounded-full" style={{ width: '17.7%' }}></div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Ações Rápidas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Link to="/admin/upload">
+              <Button variant="outline" className="w-full h-auto flex-col py-6">
+                <Upload className="w-8 h-8 mb-2" />
+                <span>Upload PDF</span>
+              </Button>
+            </Link>
+            <Link to="/admin/universes">
+              <Button variant="outline" className="w-full h-auto flex-col py-6">
+                <Book className="w-8 h-8 mb-2" />
+                <span>Ver Universos</span>
+              </Button>
+            </Link>
+            <Link to="/admin/settings">
+              <Button variant="outline" className="w-full h-auto flex-col py-6">
+                <Settings className="w-8 h-8 mb-2" />
+                <span>Configurações</span>
+              </Button>
+            </Link>
+            <Link to="/admin/profile">
+              <Button variant="outline" className="w-full h-auto flex-col py-6">
+                <User className="w-8 h-8 mb-2" />
+                <span>Meu Perfil</span>
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

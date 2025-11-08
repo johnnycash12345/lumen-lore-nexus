@@ -13,6 +13,8 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import UploadPDF from "./pages/admin/UploadPDF";
 import AdminUniverses from "./pages/admin/Universes";
+import Settings from "./pages/admin/Settings";
+import Profile from "./pages/admin/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,8 +36,8 @@ const App = () => (
             <Route index element={<Dashboard />} />
             <Route path="universes" element={<AdminUniverses />} />
             <Route path="upload" element={<UploadPDF />} />
-            <Route path="settings" element={<div className="text-navy">Configurações - Em breve</div>} />
-            <Route path="profile" element={<div className="text-navy">Perfil - Em breve</div>} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
