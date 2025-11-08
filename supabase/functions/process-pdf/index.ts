@@ -8,6 +8,15 @@ import { validatePdfText, validateExtractedEntities, sanitizeExtractedData } fro
 import { ProcessingErrorHandler } from './error-handler.ts';
 import { consolidateCharacters, consolidateLocations, consolidateEvents, consolidateObjects } from './consolidation-utils.ts';
 import { ProcessingResult } from './types.ts';
+import {
+  identifyScenes,
+  analyzeSceneEmotions,
+  analyzeCharacterEmotionalJourney,
+  analyzeRelationshipEmotionalDynamics,
+  analyzeEventEmotionalImpact,
+  consolidateEmotionalAnalysis,
+} from './emotional-extraction-strategy.ts';
+import type { SceneEmotionalAnalysis, CharacterEmotionalJourney, RelationshipEmotionalDynamics, EventEmotionalImpact } from './emotional-types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -320,6 +329,114 @@ Retorne APENAS um objeto JSON válido com esta estrutura (sem markdown, sem expl
         console.log(`Inserted ${objects.length} objects`);
       }
     }
+
+    // ===== FASE 4: ANÁLISE EMOCIONAL AVANÇADA =====
+    logger.info('Emotional Analysis', 'Starting advanced emotional analysis...');
+    await updateProgress(supabaseClient, inputUniverseId, 'Analisando emoções', 55, logger);
+
+    try {
+      // Identificar cenas
+      const scenes = await identifyScenes(pdfText, logger);
+      logger.info('Emotional Analysis', `Identified ${scenes.length} scenes`);
+
+      // Analisar emoções em cada cena (limitar a 10 cenas para performance)
+      const sceneAnalyses: SceneEmotionalAnalysis[] = [];
+      const maxScenesToAnalyze = Math.min(scenes.length, 10);
+      
+      for (let i = 0; i < maxScenesToAnalyze; i++) {
+        const scene = scenes[i];
+        const sceneAnalysis = await analyzeSceneEmotions(
+          scene.sceneNumber,
+          scene.sceneTitle,
+          scene.sceneText,
+          entities.characters.map((c: any) => c.name),
+          logger
+        );
+        sceneAnalyses.push(sceneAnalysis);
+
+        if ((i + 1) % 3 === 0) {
+          logger.info('Emotional Analysis', `Analyzed ${i + 1}/${maxScenesToAnalyze} scenes`);
+        }
+      }
+
+      // Analisar jornada emocional de personagens principais (limitar a 5)
+      const characterJourneys: CharacterEmotionalJourney[] = [];
+      const maxCharacters = Math.min(entities.characters.length, 5);
+      
+      for (let i = 0; i < maxCharacters; i++) {
+        const character = entities.characters[i];
+        const journey = await analyzeCharacterEmotionalJourney(
+          character.name,
+          character.description,
+          sceneAnalyses,
+          logger
+        );
+        characterJourneys.push(journey);
+      }
+
+      // Analisar relacionamentos principais (limitar a 3 pares)
+      const relationships: RelationshipEmotionalDynamics[] = [];
+      let relationshipCount = 0;
+      const maxRelationships = 3;
+      
+      for (let i = 0; i < entities.characters.length && relationshipCount < maxRelationships; i++) {
+        for (let j = i + 1; j < entities.characters.length && relationshipCount < maxRelationships; j++) {
+          const rel = await analyzeRelationshipEmotionalDynamics(
+            entities.characters[i].name,
+            entities.characters[j].name,
+            sceneAnalyses,
+            logger
+          );
+          relationships.push(rel);
+          relationshipCount++;
+        }
+      }
+
+      // Analisar impacto de eventos principais (limitar a 5)
+      const eventImpacts: EventEmotionalImpact[] = [];
+      const maxEvents = Math.min(entities.events.length, 5);
+      
+      for (let i = 0; i < maxEvents; i++) {
+        const event = entities.events[i];
+        const impact = await analyzeEventEmotionalImpact(
+          event.name,
+          event.description,
+          event.involvedCharacters || [],
+          logger
+        );
+        eventImpacts.push(impact);
+      }
+
+      // Consolidar análise completa
+      const emotionalAnalysis = await consolidateEmotionalAnalysis(
+        inputUniverseId,
+        sceneAnalyses,
+        characterJourneys,
+        relationships,
+        eventImpacts,
+        logger
+      );
+
+      // Salvar no banco de dados
+      const { error: emotionalError } = await supabaseClient
+        .from('emotional_analyses')
+        .insert({
+          universe_id: inputUniverseId,
+          analysis_data: emotionalAnalysis,
+        });
+
+      if (emotionalError) {
+        logger.error('Emotional Analysis', 'Failed to save emotional analysis', emotionalError);
+      } else {
+        logger.info('Emotional Analysis', 'Emotional analysis completed and saved');
+      }
+
+    } catch (error: any) {
+      logger.error('Emotional Analysis', 'Failed to complete emotional analysis', error);
+      // Continue processing even if emotional analysis fails
+    }
+
+    await updateProgress(supabaseClient, inputUniverseId, 'Análise emocional concluída', 70, logger);
 
     // ===== FASE 8: GERAR PÁGINAS =====
     

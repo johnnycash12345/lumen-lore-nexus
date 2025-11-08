@@ -64,6 +64,38 @@ export type Database = {
           },
         ]
       }
+      emotional_analyses: {
+        Row: {
+          analysis_data: Json
+          created_at: string
+          id: string
+          universe_id: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_data: Json
+          created_at?: string
+          id?: string
+          universe_id: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_data?: Json
+          created_at?: string
+          id?: string
+          universe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emotional_analyses_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           characters_involved: string[] | null
